@@ -94,7 +94,7 @@ EVOLUTION ROADMAP
 2. CRITICAL: Microservices + 4-week timeline (-25pts)
 3. CRITICAL: GDPR compliance + Bootstrap budget (-25pts)
 
-**Score:** 100 - 75 = 25/100 → HIGH RISK
+**Score:** 100 - 75 = 25/100 → High Risk
 
 **Forced Archetype:** Monolith (score < 50, budget bootstrap)
 
