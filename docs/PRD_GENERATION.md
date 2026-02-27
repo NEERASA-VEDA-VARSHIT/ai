@@ -968,3 +968,633 @@ ENVIRONMENTS
     → Production and staging environments must be isolated (separate AWS accounts recommended)
 ```
 
+
+---
+
+## Phase 4 — PRD Document Generation
+
+Phase 4 takes the outputs of Phases 1–3 and generates the full PRD document. Every section
+is generated deterministically from computed values — stability score, archetype decision,
+and stack manifest. Human-authored narrative is scaffolded with computed data, then reviewed.
+
+### 4A — Mandatory PRD Template Structure
+
+Every generated PRD MUST contain ALL of the following sections in this order.
+A PRD missing any mandatory section CANNOT pass the Quality Gate (Phase 5).
+
+```
+PRD DOCUMENT STRUCTURE
+═══════════════════════════════════════════════════════════════════════════════
+BLOCK 0 — METADATA & PIPELINE PROVENANCE
+  0.1  PRD Header & Identity
+  0.2  Pipeline Provenance Block
+  0.3  Stability Analysis Summary
+  0.4  Archetype Decision Summary
+
+BLOCK 1 — PRODUCT DEFINITION
+  1.1  Executive Summary
+  1.2  Problem Statement
+  1.3  Opportunity Hypothesis
+  1.4  Goals & Non-Goals
+  1.5  Success Metrics (KPIs)
+
+BLOCK 2 — USERS & MARKET
+  2.1  User Personas
+  2.2  User Journey Maps
+  2.3  Competitive Landscape (at minimum: 3 competitors)
+  2.4  Differentiation Statement
+
+BLOCK 3 — FEATURE REQUIREMENTS
+  3.1  Feature Inventory (all features with priority)
+  3.2  MVP Feature Set (Phase 1 only)
+  3.3  User Stories (for all MVP features)
+  3.4  Acceptance Criteria (for all user stories)
+  3.5  Out of Scope (explicit list)
+
+BLOCK 4 — NON-FUNCTIONAL REQUIREMENTS
+  4.1  Performance Requirements (from intake)
+  4.2  Availability & SLA Requirements
+  4.3  Security Requirements
+  4.4  Compliance Requirements
+  4.5  Scalability Requirements
+  4.6  Accessibility Requirements
+
+BLOCK 5 — TECHNICAL ARCHITECTURE
+  5.1  Architecture Overview
+  5.2  Selected Tech Stack (full manifest from Phase 3)
+  5.3  System Diagrams (C4 Level 1 and Level 2)
+  5.4  Data Model Overview (key entities and relationships)
+  5.5  API Surface Overview
+  5.6  Infrastructure Overview
+
+BLOCK 6 — ARCHITECTURE DECISION RECORDS
+  6.1  ADR-001: Architecture Archetype Selection
+  6.2  ADR-002: Database Selection
+  6.3  ADR-003: Authentication Strategy
+  6.4  ADR-004: Caching Strategy
+  6.5  ADR-005: Deployment Platform
+  6.x  Additional ADRs for each forced or overridden decision
+
+BLOCK 7 — RISK REGISTER
+  7.1  Technical Risks
+  7.2  Business Risks
+  7.3  Compliance Risks
+  7.4  Operational Risks
+  7.5  Risk Mitigation Plan
+
+BLOCK 8 — EVOLUTION ROADMAP
+  8.1  Stage 1 — Lean MVP (weeks 1–N)
+  8.2  Stage 2 — Scalable Startup (months N–N+6)
+  8.3  Stage 3 — Enterprise Grade (months N+6–N+18)
+  8.4  Architecture Evolution Triggers (what metrics unlock each stage)
+
+BLOCK 9 — DELIVERY PLAN
+  9.1  Team Structure & Roles
+  9.2  Sprint Structure (milestone breakdown)
+  9.3  Dependency Map
+  9.4  Definition of Done
+
+BLOCK 10 — APPROVAL & SIGN-OFF
+  10.1 Sign-Off Matrix
+  10.2 Revision History
+  10.3 Downstream Unlock Log
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+### 4B — Section Generation Rules
+
+Each section is generated using a specific set of intake fields and computed values.
+The table below defines the mandatory inputs and the generation rule for each section.
+
+| Section | Mandatory Inputs | Generation Rule |
+|---|---|---|
+| 0.1 PRD Header | intakeFormId, prdRunId, generatedAt | Template substitution |
+| 0.2 Pipeline Provenance | stabilityScore, riskLevel, archetype, stackManifest | Computed values block |
+| 0.3 Stability Summary | tensionReport | List all tensions with severity + score impact |
+| 0.4 Archetype Decision | archetypeDecision, archetypeOverridden, adrs | Archetype reasoning block from Phase 2 |
+| 1.1 Executive Summary | projectName, projectDescription, archetype, mvpTimeline | 3-paragraph template: problem, solution, delivery |
+| 1.2 Problem Statement | targetUsers, painPoints, currentSolutions | Structured problem template |
+| 1.3 Opportunity Hypothesis | marketSize, differentiation, uniqueValue | Hypothesis template |
+| 1.4 Goals & Non-Goals | mvpFeatures, outOfScopeFeatures | Explicit goal/non-goal lists |
+| 1.5 Success Metrics | performanceTargets, userGrowth, revenueTargets | SMART metrics table |
+| 2.1 User Personas | userPersonas (from intake Section 2) | Persona card per user type |
+| 2.2 User Journey Maps | primaryUserFlow, authFlow, coreFeatureFlow | Step-by-step journey per persona |
+| 2.3 Competitive Landscape | competitors (from intake) or AI-derived | 3-column table: competitor, strength, weakness |
+| 2.4 Differentiation | uniqueValue, keyAdvantages | 1-paragraph differentiation statement |
+| 3.1 Feature Inventory | allFeatures, priorities | Table: feature, priority, phase, story count |
+| 3.2 MVP Feature Set | mvpFeatures, mvpTimelineDays | Scoped feature list with rationale for inclusion |
+| 3.3 User Stories | mvpFeatures, userPersonas | As a [persona], I want [feature], so that [outcome] |
+| 3.4 Acceptance Criteria | userStories | GIVEN / WHEN / THEN format per story |
+| 3.5 Out of Scope | outOfScopeFeatures | Explicit table: feature, reason excluded, future phase |
+| 4.1 Performance Req. | targetFCP, targetApiP95, peakRPS | Performance table with targets and measurement methods |
+| 4.2 Availability | availabilitySLA, rto, rpo, maintenanceWindows | SLA table with measurement methodology |
+| 4.3 Security Req. | securityFeatures, encryptionRequirements | Security controls checklist |
+| 4.4 Compliance Req. | complianceFrameworks, piiDataCollected | Compliance obligations table per framework |
+| 4.5 Scalability Req. | peakRPS, dataVolumeAt12Months, realTimeScale | Capacity planning table |
+| 4.6 Accessibility | accessibilityStandard | WCAG compliance level and testing approach |
+| 5.1 Architecture Overview | archetype, stackManifest | Narrative + C4 Level 1 diagram |
+| 5.2 Tech Stack | stackManifest (all Phase 3 outputs) | Full stack table with per-technology rationale |
+| 5.3 System Diagrams | archetype, services, integrations | ASCII or Mermaid C4 diagrams |
+| 5.4 Data Model | entities from intake | Entity relationship table |
+| 5.5 API Surface | apiArchitecture, apiVersioning | API endpoint table with method, path, auth |
+| 5.6 Infrastructure | deploymentPlatform, environments | Infrastructure topology diagram |
+| 6.x ADRs | each forced/overridden decision | ADR template (see section 4J) |
+| 7.x Risk Register | tensions + operational risks | Risk table with likelihood, impact, mitigation |
+| 8.x Roadmap | evolutionPath, archetype | 3-stage roadmap from Phase 2D |
+| 9.1 Team Structure | devTeamSize, skillRequirements | Roles table with responsibilities |
+| 9.2 Sprint Structure | mvpTimelineDays, features | Milestone breakdown by sprint |
+| 9.3 Dependency Map | integrations, infrastructure | Dependency sequence diagram |
+| 9.4 Definition of Done | ciChecks, testingLayers, coverageTargets | DoD checklist |
+| 10.1 Sign-Off Matrix | stakeholders | Approval table per role |
+
+---
+
+### 4C — PRD Metadata Block
+
+Every PRD begins with a mandatory metadata block:
+
+```yaml
+# PRD METADATA
+prd_id:              "PRD-{YYYY}-{sequence}"         # e.g., PRD-2026-001
+intake_form_id:      "{UUID from intake}"
+prd_run_id:          "{UUID for this generation run}"
+prd_version:         "1.0.0"
+prd_status:          "DRAFT"                         # DRAFT | UNDER_REVIEW | APPROVED | FROZEN
+generated_at:        "{ISO 8601 timestamp}"
+generated_by:        "{agent ID or human name}"
+pipeline_version:    "1.0.0"
+
+# STABILITY ANALYSIS SUMMARY
+stability_score:     {0-100}
+risk_level:          "Low | Medium | High | Critical"
+tension_count:
+  critical:          {integer}
+  warning:           {integer}
+  info:              {integer}
+total_score_deducted: {integer}
+
+# ARCHETYPE DECISION
+selected_archetype:  "monolith | modular_monolith | microservices"
+selection_method:    "FORCED | SUGGESTED | DEFAULT"
+archetype_overridden: true | false
+stakeholder_preference: "{architecturePreference from intake}"
+
+# STACK MANIFEST (abbreviated)
+stack:
+  frontend:         "{framework} + {router} + {styling}"
+  backend:          "{api_architecture} via {framework}"
+  database:         "{db_technology} via {hosted_provider}"
+  orm:              "{ormChoice}"
+  cache:            "{cacheTechnology} via {hosted_provider}"
+  auth:             "{authLibrary}"
+  queue:            "{jobQueuePreference}"
+  storage:          "{objectStorageProvider}"
+  observability:    "{loggingProvider} + {errorTrackingProvider} + {apmProvider}"
+  hosting:          "{deploymentPlatform}"
+  cicd:             "{cicdPlatform}"
+
+# QUALITY GATE
+quality_score:       null                            # filled after Phase 5
+quality_passed:      null
+iterations:          0
+
+# APPROVAL
+approved_by:         []
+approved_at:         null
+frozen_at:           null
+downstream_unlocked: false
+```
+
+---
+
+### 4D — Executive Summary Generation
+
+The executive summary is generated from the following template:
+
+```
+EXECUTIVE SUMMARY
+─────────────────────────────────────────────────────────────────────
+{projectName} is a {projectType} platform designed to {corePurpose}.
+The system serves {primaryUserPersona} and {secondaryUserPersona} across
+{targetMarket}.
+
+The MVP will be delivered as a {selectedArchetype} architecture using
+{frontendStack} and {backendStack}. The system will be hosted on
+{deploymentPlatform} with an initial infrastructure budget of
+{monthlyInfrastructureBudget}/month.
+
+The stability analysis identified {totalTensionCount} architectural tensions
+({criticalCount} critical, {warningCount} warnings), resulting in a stability
+score of {stabilityScore}/100 ({riskLevel} Risk). {riskSummaryNarrative}
+
+The MVP scope encompasses {mvpFeatureCount} features targeting delivery
+within {mvpTimelineDays} days by a {devTeamSize} team. Success will be
+measured by {primarySuccessMetric} within {successTimeframe}.
+─────────────────────────────────────────────────────────────────────
+```
+
+**Risk Summary Narratives by Risk Level:**
+
+| Risk Level | Generated Narrative |
+|---|---|
+| Low Risk | "The architectural constraints are coherent and the design is executable within the declared timeline and budget." |
+| Medium Risk | "The primary tension is {primaryTension}. This has been documented in ADR-{n} and requires resolution before the {affectedMilestone} milestone." |
+| High Risk | "Multiple contradictions require stakeholder alignment before engineering begins. The PRD is marked PROVISIONAL until the tensions in Block 6 are resolved." |
+| Critical Risk | "The system as specified is architecturally unstable. This PRD is PROVISIONAL and downstream work is blocked until at least {minimumResolutionCount} critical tensions are resolved." |
+
+---
+
+### 4E — Problem Statement Generation
+
+The problem statement is generated using the structured template:
+
+```
+PROBLEM STATEMENT
+─────────────────────────────────────────────────────────────────────
+Current Situation:
+  {targetUsers} currently {currentBehavior}. This requires {currentProcess},
+  which is {inefficiencyDescription}.
+
+Pain Points:
+  {forEach painPoint}
+  - {painPoint.description}: affects {painPoint.affectedPersona},
+    occurs {painPoint.frequency}, costs approximately {painPoint.estimatedCost}
+  {endForEach}
+
+Root Cause:
+  The core problem is {rootCause}. Existing solutions ({competitors[0]},
+  {competitors[1]}) address this partially by {existingSolutionApproach}
+  but fail to {existingSolutionGap}.
+
+Impact of Inaction:
+  If this problem is not solved, {negativeConsequence} which results in
+  {businessImpact}.
+─────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### 4F — Goals & Success Metrics Generation
+
+Goals are separated into product goals and technical goals:
+
+```
+PRODUCT GOALS (Phase 1 — MVP)
+  P-GOAL-001: {featureName} — {goalDescription}
+  P-GOAL-002: {featureName} — {goalDescription}
+  ...
+
+TECHNICAL GOALS (Phase 1 — MVP)
+  T-GOAL-001: Achieve {targetFCP} FCP for public pages
+  T-GOAL-002: Achieve {targetApiP95} P95 API response time at {peakRPS} RPS
+  T-GOAL-003: Maintain {availabilitySLA} uptime SLA
+  T-GOAL-004: Zero critical security vulnerabilities at launch
+  {IF complianceFrameworks is non-empty}
+  T-GOAL-005: Pass {complianceFrameworks[0]} audit within {complianceTimeframe}
+  {endIF}
+
+NON-GOALS (explicitly out of scope for MVP)
+  {forEach outOfScopeFeature}
+  - {outOfScopeFeature}: Deferred to {plannedPhase} because {deferralReason}
+  {endForEach}
+
+SUCCESS METRICS
+  ┌───────────────────────────────────────────────────────────────────┐
+  │ Metric              │ Target  │ Measurement      │ Timeframe      │
+  ├───────────────────────────────────────────────────────────────────┤
+  │ {metric1.name}      │ {value} │ {method}         │ {timeframe}    │
+  │ {metric2.name}      │ {value} │ {method}         │ {timeframe}    │
+  │ Core Web Vitals FCP │ {fcp}   │ Lighthouse CI    │ Pre-launch     │
+  │ API P95 Latency     │ {p95}   │ APM dashboard    │ Week 1+        │
+  │ Error Rate          │ < 0.1%  │ Error tracker    │ Week 1+        │
+  │ Uptime              │ {sla}   │ Status page      │ Month 1+       │
+  └───────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 4G — User Persona Generation
+
+One persona card is generated per declared user persona:
+
+```
+PERSONA: {personaName}
+─────────────────────────────────────────────────────────────────────
+Role:        {personaRole}
+Description: {personaDescription}
+Goals:
+  - {primaryGoal}
+  - {secondaryGoal}
+Frustrations:
+  - {primaryFrustration}
+  - {secondaryFrustration}
+Technical Proficiency: {technicalProficiency}
+Frequency of Use:      {usageFrequency}
+Key Features Used:     {keyFeatures}
+Success Definition:    {successDefinition}
+─────────────────────────────────────────────────────────────────────
+```
+
+User journey maps are generated as a step-by-step sequence for each persona's primary flow:
+
+```
+JOURNEY MAP: {personaName} — {flowName}
+─────────────────────────────────────────────────────────────────────
+Step 1 | TRIGGER        | {triggerEvent}           | Emotion: 😐 Neutral
+Step 2 | DISCOVERY      | {discoveryAction}        | Emotion: 🤔 Curious
+Step 3 | ONBOARDING     | {onboardingStep}         | Emotion: 😟 Uncertain
+Step 4 | ACTIVATION     | {activationStep}         | Emotion: 🎉 Delighted
+Step 5 | CORE VALUE     | {coreValueDelivered}     | Emotion: 😊 Satisfied
+Step 6 | RETURN HABIT   | {retentionMechanism}     | Emotion: 😊 Satisfied
+─────────────────────────────────────────────────────────────────────
+Pain Points at Each Step:
+  Step 3: {onboardingPainPoint}
+  Step 4: {activationBarrier}
+─────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### 4H — Feature Requirements Generation
+
+All features receive a standardized card format:
+
+```
+FEATURE: {featureId} — {featureName}
+─────────────────────────────────────────────────────────────────────
+Priority:       P0 (MVP) | P1 (Phase 2) | P2 (Phase 3) | P3 (Future)
+Category:       Core | Auth | Admin | Integration | Infrastructure
+Personas:       {persona1}, {persona2}
+Dependencies:   {featureDependencies}
+
+Description:
+  {featureDescription}
+
+User Stories:
+  US-{id}: As a {persona}, I want to {action}, so that {outcome}.
+  US-{id}: As a {persona}, I want to {action}, so that {outcome}.
+
+Acceptance Criteria:
+  AC-{id}: GIVEN {context} WHEN {action} THEN {outcome} AND {assertion}
+  AC-{id}: GIVEN {context} WHEN {action} THEN {outcome}
+
+Technical Notes:
+  - {technicalNote1}
+  - {technicalNote2}
+
+Estimated Effort:  {effortEstimate} (S | M | L | XL)
+Phase:             {mvpPhase}
+─────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### 4I — Non-Functional Requirements Generation
+
+NFRs are generated directly from intake fields with measurement methods:
+
+```
+NON-FUNCTIONAL REQUIREMENTS
+══════════════════════════════════════════════════════════════════════
+
+PERFORMANCE
+  NFR-P-001  First Contentful Paint (FCP)
+             Target:      {targetFCP}
+             Condition:   Measured at P75 on 4G mobile, Lighthouse CI
+             Enforcement: CI pipeline fails if Lighthouse FCP > target
+             Owner:       Frontend Lead
+
+  NFR-P-002  API Response Time (P95)
+             Target:      {targetApiP95}
+             Condition:   Measured at {peakRPS} RPS with realistic payload
+             Enforcement: APM alert if P95 > target for 5 consecutive minutes
+             Owner:       Backend Lead
+
+  NFR-P-003  Database Query Time (P99)
+             Target:      < 50ms for primary queries (indexed)
+             Condition:   Measured at peak load with production-scale data
+             Enforcement: Slow query log alerts on queries > 100ms
+             Owner:       Database Engineer
+
+AVAILABILITY
+  NFR-A-001  Uptime SLA
+             Target:      {availabilitySLA}
+             Measurement: External status page + synthetic monitoring
+             Penalties:   {slaViolationPenalties}
+             RTO:         {rto}
+             RPO:         {rpo}
+
+SECURITY
+  {forEach securityFeature}
+  NFR-S-{n}  {securityFeature.name}
+             Requirement: {securityFeature.requirement}
+             Verification: {securityFeature.verificationMethod}
+  {endForEach}
+
+COMPLIANCE
+  {forEach complianceFramework}
+  NFR-C-{n}  {complianceFramework} Compliance
+             Obligations: {complianceFramework.keyObligations}
+             Target Date: {complianceFramework.certificationDate}
+             Evidence:    {complianceFramework.evidenceRequirements}
+  {endForEach}
+
+SCALABILITY
+  NFR-SC-001  Horizontal Scaling
+              Trigger:    CPU > 70% for 3 consecutive minutes
+              Action:     Auto-scale to {maxInstances} instances
+              Recovery:   Scale down when CPU < 40% for 10 minutes
+
+  NFR-SC-002  Database Connection Limits
+              Max connections: {maxDbConnections} (via {connectionPooling})
+              Pool size per instance: {poolSizePerInstance}
+              Alert threshold: Pool utilization > 80%
+
+ACCESSIBILITY
+  NFR-ACC-001 {accessibilityStandard} Compliance
+              Scope:      All public-facing and authenticated UI
+              Testing:    axe-core in CI + manual screen reader testing
+              Audit:      Quarterly automated audit via Lighthouse
+```
+
+---
+
+### 4J — Architecture Decision Records
+
+An ADR is generated for every significant architectural decision. Format:
+
+```
+ADR-{NNN}: {Decision Title}
+─────────────────────────────────────────────────────────────────────
+Date:        {date}
+Status:      ACCEPTED | SUPERSEDED | DEPRECATED
+Deciders:    {deciders}
+PRD Version: {prdVersion}
+
+CONTEXT
+  {contextDescription — what situation made this decision necessary}
+
+DECISION
+  {selectedOption}
+
+RATIONALE
+  Option A: {option} — {pros} | {cons}
+  Option B: {option} — {pros} | {cons}
+  Option C: {option} — {pros} | {cons}
+
+  Selected: Option {selectedOption} because {detailedRationale}.
+
+  Intake fields that drove this decision:
+  - {intakeField1} = {value1}
+  - {intakeField2} = {value2}
+
+  Forcing conditions (if FORCED):
+  - {forcingCondition1}
+  - {forcingCondition2}
+
+CONSEQUENCES
+  Positive:
+  - {positiveConsequence1}
+  - {positiveConsequence2}
+
+  Negative (accepted trade-offs):
+  - {negativeConsequence1}
+
+  Reversibility: EASY | MODERATE | DIFFICULT | IRREVERSIBLE
+  Reversal Plan: {reversalInstructions if applicable}
+
+FOLLOW-UP ACTIONS
+  - [ ] {action1} — Owner: {owner} — Due: {date}
+  - [ ] {action2} — Owner: {owner} — Due: {date}
+─────────────────────────────────────────────────────────────────────
+```
+
+**Standard ADRs always generated (ADR-001 through ADR-005):**
+
+| ADR | Decision | Always Generated |
+|---|---|---|
+| ADR-001 | Architecture Archetype Selection | Yes |
+| ADR-002 | Database Technology & Hosting | Yes |
+| ADR-003 | Authentication Strategy | Yes |
+| ADR-004 | Caching Strategy | If cacheLayerRequired = true or forced |
+| ADR-005 | Deployment Platform | Yes |
+| ADR-006+ | Any additional forced/overridden decision | Conditional |
+
+---
+
+### 4K — Risk Register Generation
+
+The risk register is populated from:
+1. All detected tensions (converted to risks)
+2. Standard operational risks for the selected archetype
+3. Compliance risks if compliance frameworks are declared
+
+```
+RISK REGISTER
+══════════════════════════════════════════════════════════════════════
+
+FORMAT:
+  RISK-{NNN}
+    Category:      Technical | Business | Compliance | Operational
+    Source:        Tension {tensionId} | Standard | Manual
+    Description:   {riskDescription}
+    Likelihood:    LOW | MEDIUM | HIGH
+    Impact:        LOW | MEDIUM | HIGH | CRITICAL
+    Risk Score:    {likelihood × impact} → LOW | MEDIUM | HIGH | CRITICAL
+    Mitigation:    {mitigationStrategy}
+    Owner:         {roleResponsible}
+    Review Date:   {reviewDate}
+    Status:        OPEN | MITIGATING | RESOLVED | ACCEPTED
+
+STANDARD RISKS BY ARCHETYPE:
+
+  monolith:
+    RISK-STD-001: Deployment coupling — all features deploy together
+                  → Mitigation: Feature flags, branch-by-abstraction
+    RISK-STD-002: Scaling ceiling — vertical scaling has physical limits
+                  → Mitigation: Define horizontal scaling plan at MVP
+    RISK-STD-003: Technology lock-in — single-process constraints
+                  → Mitigation: Domain module boundaries enable future extraction
+
+  modular_monolith:
+    RISK-STD-001: Module boundary drift — modules begin importing each other directly
+                  → Mitigation: ESLint import boundary rules, quarterly module audits
+    RISK-STD-002: Shared database bottleneck
+                  → Mitigation: Read replicas, caching, query optimization
+
+  microservices:
+    RISK-STD-001: Distributed system complexity — network failures, partial availability
+                  → Mitigation: Circuit breakers, timeout policies, retry budgets
+    RISK-STD-002: Data consistency across services — distributed transactions
+                  → Mitigation: Saga pattern or eventual consistency acceptance
+    RISK-STD-003: Service contract breakage — API changes break consumers
+                  → Mitigation: Consumer-driven contract testing (Pact)
+══════════════════════════════════════════════════════════════════════
+```
+
+---
+
+### 4L — Evolution Roadmap Generation
+
+The roadmap is generated using the 3-stage model from Phase 2D, with intake-specific milestones:
+
+```
+EVOLUTION ROADMAP
+══════════════════════════════════════════════════════════════════════
+
+STAGE 1 — LEAN MVP
+  Duration:    {mvpTimelineDays} days
+  Archetype:   {selectedArchetype}
+  Goal:        Validate core value proposition with real users
+  Definition of Done:
+    ✓ All P0 features deployed to production
+    ✓ {availabilitySLA} uptime achieved
+    ✓ {targetApiP95} P95 API response time verified
+    ✓ {primarySuccessMetric} baseline established
+    ✓ Security audit passed
+    {IF complianceFrameworks is non-empty}
+    ✓ Initial {complianceFrameworks[0]} controls implemented
+    {endIF}
+  Tech Milestones:
+    Week 1–2:  Infrastructure setup, CI/CD, auth skeleton
+    Week 3–4:  Core data model, primary API routes
+    Week N–N:  {featureGroup1} features
+    Week N–N:  {featureGroup2} features
+    Final week: QA, performance testing, security scan, deploy
+
+STAGE 2 — SCALABLE STARTUP
+  Trigger:     {stage2Trigger — e.g., peakRPS consistently > 50% of target}
+  Duration:    6 months post-Stage 1
+  Changes:
+    - {architectureChange1}  (e.g., Add read replicas)
+    - {architectureChange2}  (e.g., Introduce Redis caching)
+    - {architectureChange3}  (e.g., Extract job processing to queue)
+  Team Growth: {teamGrowthPlan}
+  Budget:      {stage2BudgetEstimate}/month
+
+STAGE 3 — ENTERPRISE GRADE
+  Trigger:     {stage3Trigger — e.g., enterprise customer contract signed}
+  Duration:    12–18 months post-Stage 2
+  Changes:
+    - {architectureChange1}  (e.g., Multi-region deployment)
+    - {architectureChange2}  (e.g., Extract high-traffic domains to services)
+    - {architectureChange3}  (e.g., Dedicated compliance infrastructure)
+  Team Growth: {teamGrowthPlan}
+  Budget:      {stage3BudgetEstimate}/month
+
+ARCHITECTURE EVOLUTION TRIGGERS (gates between stages)
+  Stage 1 → Stage 2:
+    ✓ MRR ≥ ${stage1ToStage2MRR}
+    ✓ Consistent load > {loadThreshold} RPS
+    ✓ Team size ≥ {teamSizeThreshold}
+    ✓ SLA violation count = 0 for 30 consecutive days
+
+  Stage 2 → Stage 3:
+    ✓ Enterprise customer signed (ACV ≥ ${enterpriseACV})
+    ✓ Compliance certification required by contract
+    ✓ Engineering team ≥ {enterpriseTeamSize}
+══════════════════════════════════════════════════════════════════════
+```
+
