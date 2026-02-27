@@ -1516,3 +1516,1295 @@ This log is the primary evidence source for:
 - Post-launch incident analysis (tracing an architectural decision back to a clarification)
 - Pipeline debugging (understanding why a specific architectural decision was made)
 
+
+---
+
+## TypeScript Interfaces
+
+```typescript
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export enum AmbiguityType {
+  Missing       = "AMB-M",
+  Vague         = "AMB-V",
+  Contradictory = "AMB-X",
+  Ambiguous     = "AMB-A",
+  Inconsistent  = "AMB-I",
+  Stale         = "AMB-S",
+}
+
+export enum AmbiguitySeverity {
+  Critical = "AMB-1",
+  Warning  = "AMB-2",
+  Info     = "AMB-3",
+}
+
+export enum AmbiguityStatus {
+  Detected                = "DETECTED",
+  QuestionGenerated       = "QUESTION_GENERATED",
+  AwaitingResponse        = "AWAITING_RESPONSE",
+  ResponseReceived        = "RESPONSE_RECEIVED",
+  Rejected                = "REJECTED",
+  Validated               = "VALIDATED",
+  Resolved                = "RESOLVED",
+  ResolvedWithCascade     = "RESOLVED_WITH_CASCADE",
+  AutoAssumed             = "AUTO_ASSUMED",
+  AutoAssumedFromSilence  = "AUTO_ASSUMED_FROM_SILENCE",
+  Confirmed               = "CONFIRMED",
+  ConfirmedBySilence      = "CONFIRMED_BY_SILENCE",
+  Closed                  = "CLOSED",
+}
+
+export enum ClarificationRequestStatus {
+  Open                = "OPEN",
+  PartiallyResolved   = "PARTIALLY_RESOLVED",
+  FullyResolved       = "FULLY_RESOLVED",
+  Expired             = "EXPIRED",
+}
+
+export enum ClarificationRequestPriority {
+  Urgent  = "URGENT",  // has AMB-1 questions
+  Normal  = "NORMAL",  // AMB-2 only
+  Low     = "LOW",     // AMB-3 only
+}
+
+export enum StakeholderRole {
+  Founder   = "FOUNDER",
+  CTO       = "CTO",
+  CPO       = "CPO",
+  TechLead  = "TECH_LEAD",
+  SecLead   = "SEC_LEAD",
+  Legal     = "LEGAL",
+  Design    = "DESIGN",
+  Finance   = "FINANCE",
+  Agent     = "AGENT",
+}
+
+export enum EscalationLevel {
+  L1 = "L1",  // AMB-1: primary stakeholder, 48h
+  L2 = "L2",  // AMB-2: primary stakeholder, 5 business days
+  L3 = "L3",  // AMB-3: no deadline
+  L4 = "L4",  // No response to L1: secondary + manager
+  L5 = "L5",  // No response to L4: forced resolution
+}
+
+export enum ResolutionMethod {
+  StakeholderResponse  = "STAKEHOLDER_RESPONSE",
+  AutoAssumption       = "AUTO_ASSUMPTION",
+  ForcedResolution     = "FORCED_RESOLUTION",
+  StakeholderSilence   = "STAKEHOLDER_SILENCE",
+  ConflictResolution   = "CONFLICT_RESOLUTION",
+}
+
+export enum DeliveryChannel {
+  InAppUI          = "in_app_ui",
+  Email            = "email",
+  AsyncApiResponse = "async_api_response",
+  SlackNotification = "slack_notification",
+  GitHubComment    = "github_comment",
+}
+
+export enum PostFreezeIssueSeverity {
+  Critical = "CRITICAL",
+  Material = "MATERIAL",
+  Minor    = "MINOR",
+}
+
+export enum ConflictType {
+  Factual  = "TYPE-A",
+  Priority = "TYPE-B",
+  Scope    = "TYPE-C",
+}
+
+export enum IntakeReadinessStatus {
+  Ready                     = "READY",          // score ≥ 90
+  ProceedWithAssumptions    = "PROCEED_WITH_ASSUMPTIONS",  // 70–89
+  ClarificationRecommended  = "CLARIFICATION_RECOMMENDED", // 50–69
+  Halted                    = "HALTED",          // < 50 or any AMB-1
+  ClarificationExhausted    = "CLARIFICATION_EXHAUSTED",
+  ManualReviewRequired      = "MANUAL_REVIEW_REQUIRED",
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AMBIGUITY DETECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DetectedAmbiguity {
+  ambiguityId:           string;          // AMB-{UUID}
+  ambiguityType:         AmbiguityType;
+  severity:              AmbiguitySeverity;
+  fieldPath:             string;          // e.g. "section13.complianceFrameworks"
+  sectionNumber:         number;
+  currentValue:          unknown;
+  detectionRuleId:       string;          // e.g. "XC-003" or "S13-COMPL-001"
+  description:           string;
+  architecturalImpact:   string;          // what decision is blocked
+  automatedAssumption:   string | null;   // null if AMB-1 (no safe assumption)
+  status:                AmbiguityStatus;
+  createdAt:             Date;
+  resolvedAt:            Date | null;
+  resolvedValue:         unknown | null;
+}
+
+export interface AmbiguityReport {
+  intakeFormId:          string;
+  reportId:              string;          // AR-{UUID}
+  generatedAt:           Date;
+  ambiguities:           DetectedAmbiguity[];
+  criticalCount:         number;
+  warningCount:          number;
+  infoCount:             number;
+  ambiguityScore:        number;          // 0–100
+  readinessStatus:       IntakeReadinessStatus;
+  haltConditions:        string[];        // which HALT-00N conditions triggered
+  blockedDecisions:      string[];        // list of architectural decisions blocked
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION QUESTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClarificationQuestion {
+  cqId:                  string;          // CQ-{crId}-{n}
+  crId:                  string;
+  ambiguityId:           string;
+  ambiguityType:         AmbiguityType;
+  severity:              AmbiguitySeverity;
+  fieldPath:             string;
+  sectionNumber:         number;
+  currentValue:          unknown;
+  requiredFor:           string;          // what architectural decision this unblocks
+  questionText:          string;
+  answerFormat: {
+    type:                "enum" | "integer" | "boolean" | "string" | "list";
+    options:             string[] | null;
+    bounds:              { min: number; max: number } | null;
+    example:             string;
+  };
+  context:               string;
+  ifNotAnsweredByDeadline: string;        // "pipeline remains halted" | assumption text
+  assignedTo:            StakeholderRole;
+  escalationTo:          StakeholderRole;
+  escalationLevel:       EscalationLevel;
+  status:                AmbiguityStatus;
+  sequentialDependencies: string[];       // CQ-IDs this question depends on
+  dependentQuestions:    string[];        // CQ-IDs that depend on this question's answer
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION REQUEST
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClarificationRequest {
+  crId:                  string;          // CR-{YYYY}-{sequence}
+  intakeFormId:          string;
+  roundNumber:           number;          // 1–5
+  status:                ClarificationRequestStatus;
+  priority:              ClarificationRequestPriority;
+  createdAt:             Date;
+  deliveredAt:           Date | null;
+  deliveryChannel:       DeliveryChannel;
+  responseDeadline:      Date;
+  questions:             ClarificationQuestion[];
+  criticalCount:         number;
+  warningCount:          number;
+  infoCount:             number;
+  blockedDecisions:      string[];
+  resolvedCount:         number;
+  totalCount:            number;
+  fullyResolvedAt:       Date | null;
+  expiredAt:             Date | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESPONSES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClarificationResponse {
+  responseId:            string;          // RESP-{UUID}
+  crId:                  string;
+  cqId:                  string;
+  intakeFormId:          string;
+  respondedBy:           StakeholderRole;
+  respondedAt:           Date;
+  deliveryChannel:       DeliveryChannel;
+  responseValue:         unknown;
+  validationPassed:      boolean;
+  validationErrors:      string[];        // RV-00N messages
+  appliedToIntake:       boolean;
+  rejectedAt:            Date | null;
+  rejectionReason:       string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFLICT HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StakeholderConflict {
+  conflictId:            string;          // CONFLICT-{UUID}
+  crId:                  string;
+  cqId:                  string;
+  conflictType:          ConflictType;
+  response1:             ClarificationResponse;
+  response2:             ClarificationResponse;
+  detectedAt:            Date;
+  escalatedTo:           StakeholderRole;
+  escalatedAt:           Date | null;
+  resolvedAt:            Date | null;
+  resolvedValue:         unknown | null;
+  resolvedBy:            StakeholderRole | null;
+  resolutionNotes:       string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ASSUMPTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AssumptionRecord {
+  assumptionId:          string;          // ASSUMPTION-{NNN}
+  ambiguityId:           string;
+  cqId:                  string | null;
+  fieldPath:             string;
+  originalValue:         unknown;
+  assumedValue:          unknown;
+  assumptionBasis:       "automated_default" | "stakeholder_silence" | "forced_resolution";
+  assumedAt:             Date;
+  ambiguityType:         AmbiguityType;
+  severity:              AmbiguitySeverity;
+  confirmedBy:           StakeholderRole | "AUTO" | null;
+  confirmedAt:           Date | null;
+  overridable:           boolean;
+  architectureImpact:    string;
+  stakeholderNotice:     string;
+  requiresHumanReview:   boolean;         // true if forced_resolution
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION LOG (AUDIT TRAIL)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClarificationLogRecord {
+  logId:                 string;          // CL-{UUID}
+  intakeFormId:          string;
+  crId:                  string;
+  cqId:                  string;
+  ambiguityId:           string;
+  ambiguityType:         AmbiguityType;
+  severity:              AmbiguitySeverity;
+  fieldPath:             string;
+  originalValue:         unknown;
+  questionText:          string;
+  sentTo:                StakeholderRole;
+  sentAt:                Date;
+  deliveryChannel:       DeliveryChannel;
+  deliveredAt:           Date | null;
+  responseReceivedAt:    Date | null;
+  responseValue:         unknown | null;
+  responseValidated:     boolean | null;
+  validationError:       string | null;
+  finalValue:            unknown;
+  resolutionMethod:      ResolutionMethod;
+  resolvedAt:            Date;
+  resolvedBy:            StakeholderRole | "AUTO" | "FORCED";
+  cascadesTriggered:     string[];        // field paths
+  newAmbiguitiesCreated: string[];        // AMB-IDs
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST-FREEZE ISSUE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PostFreezeIssue {
+  issueId:               string;          // PFI-{UUID}
+  frozenPrdId:           string;
+  intakeFormId:          string;
+  issueDescription:      string;
+  discoveredBy:          StakeholderRole;
+  discoveredAt:          Date;
+  severity:              PostFreezeIssueSeverity;
+  resolution:            "new_intake" | "erratum" | "supersession" | null;
+  newIntakeFormId:       string | null;
+  newPrdId:              string | null;
+  erratumId:             string | null;
+  resolvedAt:            Date | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP-LEVEL CLARIFICATION RUN
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClarificationRun {
+  runId:                 string;          // CLARRUN-{UUID}
+  intakeFormId:          string;
+  trigger:               "pre_prd" | "during_prd_generation" | "prd_iteration_stall" | "post_freeze";
+  startedAt:             Date;
+  completedAt:           Date | null;
+  status:                IntakeReadinessStatus;
+  roundsCompleted:       number;
+  ambiguityReport:       AmbiguityReport;
+  clarificationRequests: ClarificationRequest[];
+  assumptions:           AssumptionRecord[];
+  conflicts:             StakeholderConflict[];
+  auditLog:              ClarificationLogRecord[];
+  reEntryPoint:          string | null;  // e.g. "PRD_GENERATION Phase 1"
+  reEntryScope:          "full" | "partial" | null;
+}
+```
+
+---
+
+## Zod Validation Schemas
+
+```typescript
+import { z } from "zod";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AmbiguityTypeSchema = z.enum([
+  "AMB-M", "AMB-V", "AMB-X", "AMB-A", "AMB-I", "AMB-S",
+]);
+
+export const AmbiguitySeveritySchema = z.enum(["AMB-1", "AMB-2", "AMB-3"]);
+
+export const AmbiguityStatusSchema = z.enum([
+  "DETECTED", "QUESTION_GENERATED", "AWAITING_RESPONSE", "RESPONSE_RECEIVED",
+  "REJECTED", "VALIDATED", "RESOLVED", "RESOLVED_WITH_CASCADE",
+  "AUTO_ASSUMED", "AUTO_ASSUMED_FROM_SILENCE", "CONFIRMED",
+  "CONFIRMED_BY_SILENCE", "CLOSED",
+]);
+
+export const ClarificationRequestStatusSchema = z.enum([
+  "OPEN", "PARTIALLY_RESOLVED", "FULLY_RESOLVED", "EXPIRED",
+]);
+
+export const StakeholderRoleSchema = z.enum([
+  "FOUNDER", "CTO", "CPO", "TECH_LEAD", "SEC_LEAD", "LEGAL",
+  "DESIGN", "FINANCE", "AGENT",
+]);
+
+export const EscalationLevelSchema = z.enum(["L1", "L2", "L3", "L4", "L5"]);
+
+export const ResolutionMethodSchema = z.enum([
+  "STAKEHOLDER_RESPONSE", "AUTO_ASSUMPTION", "FORCED_RESOLUTION",
+  "STAKEHOLDER_SILENCE", "CONFLICT_RESOLUTION",
+]);
+
+export const DeliveryChannelSchema = z.enum([
+  "in_app_ui", "email", "async_api_response",
+  "slack_notification", "github_comment",
+]);
+
+export const IntakeReadinessStatusSchema = z.enum([
+  "READY", "PROCEED_WITH_ASSUMPTIONS", "CLARIFICATION_RECOMMENDED",
+  "HALTED", "CLARIFICATION_EXHAUSTED", "MANUAL_REVIEW_REQUIRED",
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DETECTED AMBIGUITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DetectedAmbiguitySchema = z.object({
+  ambiguityId:         z.string().regex(/^AMB-/),
+  ambiguityType:       AmbiguityTypeSchema,
+  severity:            AmbiguitySeveritySchema,
+  fieldPath:           z.string().min(1),
+  sectionNumber:       z.number().int().min(1).max(25),
+  currentValue:        z.unknown(),
+  detectionRuleId:     z.string().min(1),
+  description:         z.string().min(10),
+  architecturalImpact: z.string().min(10),
+  automatedAssumption: z.string().nullable(),
+  status:              AmbiguityStatusSchema,
+  createdAt:           z.date(),
+  resolvedAt:          z.date().nullable(),
+  resolvedValue:       z.unknown().nullable(),
+}).refine(
+  (a) => {
+    // AMB-1 (Critical) must never have an automated assumption
+    if (a.severity === "AMB-1") return a.automatedAssumption === null;
+    return true;
+  },
+  { message: "Critical ambiguities (AMB-1) must not have automated assumptions" }
+).refine(
+  (a) => {
+    if (a.status === "CLOSED" || a.status === "RESOLVED") {
+      return a.resolvedAt !== null && a.resolvedValue !== null;
+    }
+    return true;
+  },
+  { message: "CLOSED and RESOLVED ambiguities must have resolvedAt and resolvedValue set" }
+);
+
+export const AmbiguityReportSchema = z.object({
+  intakeFormId:       z.string().uuid(),
+  reportId:           z.string().regex(/^AR-/),
+  generatedAt:        z.date(),
+  ambiguities:        z.array(DetectedAmbiguitySchema),
+  criticalCount:      z.number().int().min(0),
+  warningCount:       z.number().int().min(0),
+  infoCount:          z.number().int().min(0),
+  ambiguityScore:     z.number().int().min(0).max(100),
+  readinessStatus:    IntakeReadinessStatusSchema,
+  haltConditions:     z.array(z.string()),
+  blockedDecisions:   z.array(z.string()),
+}).refine(
+  (r) => r.criticalCount === r.ambiguities.filter(a => a.severity === "AMB-1").length,
+  { message: "criticalCount must match number of AMB-1 ambiguities in the array" }
+).refine(
+  (r) => {
+    const computed = Math.max(
+      0,
+      100
+        - r.criticalCount * 20
+        - r.warningCount * 5
+        - r.infoCount * 1
+    );
+    return r.ambiguityScore === computed;
+  },
+  { message: "ambiguityScore must equal 100 - (criticalCount×20) - (warningCount×5) - (infoCount×1), floored at 0" }
+).refine(
+  (r) => {
+    if (r.criticalCount > 0) {
+      return r.readinessStatus === "HALTED" || r.readinessStatus === "CLARIFICATION_EXHAUSTED";
+    }
+    return true;
+  },
+  { message: "If criticalCount > 0, readinessStatus must be HALTED or CLARIFICATION_EXHAUSTED" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION QUESTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ClarificationQuestionSchema = z.object({
+  cqId:                z.string().regex(/^CQ-/),
+  crId:                z.string().regex(/^CR-/),
+  ambiguityId:         z.string().regex(/^AMB-/),
+  ambiguityType:       AmbiguityTypeSchema,
+  severity:            AmbiguitySeveritySchema,
+  fieldPath:           z.string().min(1),
+  sectionNumber:       z.number().int().min(1).max(25),
+  currentValue:        z.unknown(),
+  requiredFor:         z.string().min(5),
+  questionText:        z.string().min(20),
+  answerFormat:        z.object({
+    type:    z.enum(["enum", "integer", "boolean", "string", "list"]),
+    options: z.array(z.string()).nullable(),
+    bounds:  z.object({ min: z.number(), max: z.number() }).nullable(),
+    example: z.string().min(1),
+  }),
+  context:             z.string().min(20),
+  ifNotAnsweredByDeadline: z.string().min(5),
+  assignedTo:          StakeholderRoleSchema,
+  escalationTo:        StakeholderRoleSchema,
+  escalationLevel:     EscalationLevelSchema,
+  status:              AmbiguityStatusSchema,
+  sequentialDependencies: z.array(z.string()),
+  dependentQuestions:  z.array(z.string()),
+}).refine(
+  (q) => {
+    // enum and list types must have non-empty options
+    if (q.answerFormat.type === "enum" || q.answerFormat.type === "list") {
+      return q.answerFormat.options !== null && q.answerFormat.options.length > 0;
+    }
+    return true;
+  },
+  { message: "Enum and list answer formats must have non-empty options array" }
+).refine(
+  (q) => {
+    // integer types must have bounds
+    if (q.answerFormat.type === "integer") {
+      return q.answerFormat.bounds !== null;
+    }
+    return true;
+  },
+  { message: "Integer answer formats must have bounds defined" }
+).refine(
+  (q) => q.assignedTo !== q.escalationTo,
+  { message: "assignedTo and escalationTo must be different stakeholders" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION REQUEST
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ClarificationRequestSchema = z.object({
+  crId:              z.string().regex(/^CR-\d{4}-\d{3}$/),
+  intakeFormId:      z.string().uuid(),
+  roundNumber:       z.number().int().min(1).max(5),
+  status:            ClarificationRequestStatusSchema,
+  priority:          z.enum(["URGENT", "NORMAL", "LOW"]),
+  createdAt:         z.date(),
+  deliveredAt:       z.date().nullable(),
+  deliveryChannel:   DeliveryChannelSchema,
+  responseDeadline:  z.date(),
+  questions:         z.array(ClarificationQuestionSchema).min(1).max(10),
+  criticalCount:     z.number().int().min(0),
+  warningCount:      z.number().int().min(0),
+  infoCount:         z.number().int().min(0),
+  blockedDecisions:  z.array(z.string()),
+  resolvedCount:     z.number().int().min(0),
+  totalCount:        z.number().int().min(1),
+  fullyResolvedAt:   z.date().nullable(),
+  expiredAt:         z.date().nullable(),
+}).refine(
+  (cr) => cr.resolvedCount <= cr.totalCount,
+  { message: "resolvedCount cannot exceed totalCount" }
+).refine(
+  (cr) => cr.totalCount === cr.questions.length,
+  { message: "totalCount must equal the number of questions" }
+).refine(
+  (cr) => {
+    if (cr.criticalCount > 0) return cr.priority === "URGENT";
+    return true;
+  },
+  { message: "CRs with critical questions must have priority = URGENT" }
+).refine(
+  (cr) => {
+    if (cr.status === "FULLY_RESOLVED") return cr.fullyResolvedAt !== null;
+    return true;
+  },
+  { message: "FULLY_RESOLVED CRs must have fullyResolvedAt set" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION RESPONSE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ClarificationResponseSchema = z.object({
+  responseId:        z.string().regex(/^RESP-/),
+  crId:              z.string().regex(/^CR-/),
+  cqId:              z.string().regex(/^CQ-/),
+  intakeFormId:      z.string().uuid(),
+  respondedBy:       StakeholderRoleSchema,
+  respondedAt:       z.date(),
+  deliveryChannel:   DeliveryChannelSchema,
+  responseValue:     z.unknown(),
+  validationPassed:  z.boolean(),
+  validationErrors:  z.array(z.string()),
+  appliedToIntake:   z.boolean(),
+  rejectedAt:        z.date().nullable(),
+  rejectionReason:   z.string().nullable(),
+}).refine(
+  (r) => {
+    if (!r.validationPassed) {
+      return r.validationErrors.length > 0 && r.appliedToIntake === false;
+    }
+    return true;
+  },
+  { message: "Failed validation must have validation errors and appliedToIntake = false" }
+).refine(
+  (r) => {
+    if (r.appliedToIntake) return r.validationPassed === true;
+    return true;
+  },
+  { message: "appliedToIntake can only be true if validationPassed is true" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ASSUMPTION RECORD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AssumptionRecordSchema = z.object({
+  assumptionId:        z.string().regex(/^ASSUMPTION-\d{3}$/),
+  ambiguityId:         z.string().regex(/^AMB-/),
+  cqId:                z.string().nullable(),
+  fieldPath:           z.string().min(1),
+  originalValue:       z.unknown(),
+  assumedValue:        z.unknown(),
+  assumptionBasis:     z.enum([
+    "automated_default", "stakeholder_silence", "forced_resolution",
+  ]),
+  assumedAt:           z.date(),
+  ambiguityType:       AmbiguityTypeSchema,
+  severity:            AmbiguitySeveritySchema,
+  confirmedBy:         z.union([StakeholderRoleSchema, z.literal("AUTO")]).nullable(),
+  confirmedAt:         z.date().nullable(),
+  overridable:         z.boolean(),
+  architectureImpact:  z.string().min(10),
+  stakeholderNotice:   z.string().min(10),
+  requiresHumanReview: z.boolean(),
+}).refine(
+  (a) => {
+    // Forced resolution always requires human review
+    if (a.assumptionBasis === "forced_resolution") return a.requiresHumanReview === true;
+    return true;
+  },
+  { message: "Forced resolution assumptions must always require human review" }
+).refine(
+  (a) => {
+    // AMB-1 assumptions must not be automated_default
+    if (a.severity === "AMB-1") return a.assumptionBasis !== "automated_default";
+    return true;
+  },
+  { message: "Critical ambiguities (AMB-1) cannot use automated_default assumption basis" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLARIFICATION LOG RECORD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ClarificationLogRecordSchema = z.object({
+  logId:               z.string().regex(/^CL-/),
+  intakeFormId:        z.string().uuid(),
+  crId:                z.string().regex(/^CR-/),
+  cqId:                z.string().regex(/^CQ-/),
+  ambiguityId:         z.string().regex(/^AMB-/),
+  ambiguityType:       AmbiguityTypeSchema,
+  severity:            AmbiguitySeveritySchema,
+  fieldPath:           z.string().min(1),
+  originalValue:       z.unknown(),
+  questionText:        z.string().min(20),
+  sentTo:              StakeholderRoleSchema,
+  sentAt:              z.date(),
+  deliveryChannel:     DeliveryChannelSchema,
+  deliveredAt:         z.date().nullable(),
+  responseReceivedAt:  z.date().nullable(),
+  responseValue:       z.unknown().nullable(),
+  responseValidated:   z.boolean().nullable(),
+  validationError:     z.string().nullable(),
+  finalValue:          z.unknown(),
+  resolutionMethod:    ResolutionMethodSchema,
+  resolvedAt:          z.date(),
+  resolvedBy:          z.union([
+    StakeholderRoleSchema,
+    z.literal("AUTO"),
+    z.literal("FORCED"),
+  ]),
+  cascadesTriggered:   z.array(z.string()),
+  newAmbiguitiesCreated: z.array(z.string()),
+}).refine(
+  (l) => {
+    // If resolved by FORCED, resolution method must be FORCED_RESOLUTION
+    if (l.resolvedBy === "FORCED") return l.resolutionMethod === "FORCED_RESOLUTION";
+    return true;
+  },
+  { message: "FORCED resolvedBy requires resolutionMethod = FORCED_RESOLUTION" }
+).refine(
+  (l) => {
+    // If resolved by AUTO, resolution method must be AUTO_ASSUMPTION or STAKEHOLDER_SILENCE
+    if (l.resolvedBy === "AUTO") {
+      return (
+        l.resolutionMethod === "AUTO_ASSUMPTION" ||
+        l.resolutionMethod === "STAKEHOLDER_SILENCE"
+      );
+    }
+    return true;
+  },
+  { message: "AUTO resolvedBy requires resolutionMethod of AUTO_ASSUMPTION or STAKEHOLDER_SILENCE" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST-FREEZE ISSUE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const PostFreezeIssueSchema = z.object({
+  issueId:         z.string().regex(/^PFI-/),
+  frozenPrdId:     z.string().regex(/^PRD-/),
+  intakeFormId:    z.string().uuid(),
+  issueDescription: z.string().min(20),
+  discoveredBy:    StakeholderRoleSchema,
+  discoveredAt:    z.date(),
+  severity:        z.enum(["CRITICAL", "MATERIAL", "MINOR"]),
+  resolution:      z.enum(["new_intake", "erratum", "supersession"]).nullable(),
+  newIntakeFormId: z.string().uuid().nullable(),
+  newPrdId:        z.string().nullable(),
+  erratumId:       z.string().nullable(),
+  resolvedAt:      z.date().nullable(),
+}).refine(
+  (i) => {
+    if (i.severity === "CRITICAL" || i.severity === "MATERIAL") {
+      if (i.resolvedAt !== null) {
+        return i.resolution === "new_intake" || i.resolution === "supersession";
+      }
+    }
+    return true;
+  },
+  { message: "Resolved CRITICAL/MATERIAL issues must use new_intake or supersession resolution" }
+).refine(
+  (i) => {
+    if (i.resolution === "erratum") return i.erratumId !== null;
+    return true;
+  },
+  { message: "Erratum resolution must have erratumId set" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP-LEVEL CLARIFICATION RUN
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ClarificationRunSchema = z.object({
+  runId:                 z.string().regex(/^CLARRUN-/),
+  intakeFormId:          z.string().uuid(),
+  trigger:               z.enum([
+    "pre_prd", "during_prd_generation", "prd_iteration_stall", "post_freeze",
+  ]),
+  startedAt:             z.date(),
+  completedAt:           z.date().nullable(),
+  status:                IntakeReadinessStatusSchema,
+  roundsCompleted:       z.number().int().min(0).max(5),
+  ambiguityReport:       AmbiguityReportSchema,
+  clarificationRequests: z.array(ClarificationRequestSchema),
+  assumptions:           z.array(AssumptionRecordSchema),
+  conflicts:             z.array(z.object({
+    conflictId:   z.string().regex(/^CONFLICT-/),
+    crId:         z.string(),
+    cqId:         z.string(),
+    conflictType: z.enum(["TYPE-A", "TYPE-B", "TYPE-C"]),
+    resolvedAt:   z.date().nullable(),
+    resolvedBy:   StakeholderRoleSchema.nullable(),
+  })),
+  auditLog:              z.array(ClarificationLogRecordSchema),
+  reEntryPoint:          z.string().nullable(),
+  reEntryScope:          z.enum(["full", "partial"]).nullable(),
+}).refine(
+  (run) => run.roundsCompleted === run.clarificationRequests.length,
+  { message: "roundsCompleted must equal the number of clarification requests" }
+).refine(
+  (run) => {
+    if (run.status === "READY" || run.status === "PROCEED_WITH_ASSUMPTIONS") {
+      return run.reEntryPoint !== null;
+    }
+    return true;
+  },
+  { message: "Completed runs must specify a re-entry point" }
+);
+```
+
+
+---
+
+## Example Clarification Flows
+
+The following three examples show end-to-end clarification flows for the three intake archetypes
+from `REQUIREMENTS_INTAKE.md`. Each example demonstrates different ambiguity types and
+resolution paths.
+
+---
+
+### Flow A — Bootstrap SaaS: Vague Scale Clarification
+
+**Scenario:** A solo founder submits an intake form for a simple task-management SaaS.
+Most fields are filled correctly, but three fields are ambiguous.
+
+#### Step 1 — Ambiguity Detection
+
+```
+AMBIGUITY REPORT
+──────────────────────────────────────────────────────────────────────────
+Intake Form ID:    intake-flow-a-bootstrap-001
+Generated At:      2026-02-01T08:00:00Z
+Total Ambiguities: 3
+  Critical (AMB-1): 1
+  Warning  (AMB-2): 1
+  Info     (AMB-3): 1
+
+Ambiguity Score:   74/100 (100 - 20 - 5 - 1)
+Readiness Status:  HALTED (1 Critical ambiguity present)
+
+DETECTED AMBIGUITIES:
+  AMB-001
+    Type:    AMB-V (Vague)
+    Severity: AMB-1 (Critical)
+    Field:   section11.targetApiP95
+    Current: "fast"
+    Trigger: non-numeric performance target
+    Impact:  Cannot select connection pooling strategy or determine
+             whether a cache layer is required.
+    Assumption: None — AMB-1 requires human resolution.
+
+  AMB-002
+    Type:    AMB-M (Missing)
+    Severity: AMB-2 (Warning)
+    Field:   section12.rto
+    Current: null
+    Trigger: null value for optional SLA field
+    Impact:  Cannot prescribe backup strategy or failover configuration.
+    Assumption: "1hr_to_4hr" (industry average for bootstrap SaaS)
+
+  AMB-003
+    Type:    AMB-I (Inconsistent)
+    Severity: AMB-3 (Info)
+    Field:   section1.projectDescription
+    Current: "A task app that helps teams stay organized."
+    Trigger: description is 45 chars but contains "teams" while
+             section2 lists only one persona (individual user)
+    Impact:  None architectural. Note only.
+    Assumption: Treat as single-user by default.
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 2 — Clarification Request Generated
+
+```
+CLARIFICATION REQUEST CR-2026-001
+──────────────────────────────────────────────────────────────────────────
+Status:    OPEN
+Priority:  URGENT (1 Critical question)
+Deadline:  48 hours from delivery
+
+QUESTION CQ-CR-2026-001-01 [AMB-1]
+  Field:    section11.targetApiP95
+  Current:  "fast"
+  Assigned: TECH_LEAD (founder acts as Tech Lead for solo project)
+  Escalate: CTO (N/A — same person; escalate to FOUNDER after 48h)
+
+  QUESTION TEXT:
+    "The API response time target `targetApiP95` is currently set to 'fast',
+     which is not a numeric value and cannot be used to select infrastructure.
+     Please specify a concrete target in one of these formats:
+
+     Options:
+       (a) under_100ms  — Very fast; requires caching + optimized queries
+       (b) 100ms_to_300ms  — Fast; achievable with indexed queries + pooling
+       (c) 300ms_to_500ms  — Standard; most SaaS products meet this
+       (d) 500ms_to_1s  — Acceptable; lightweight stack sufficient
+
+     Example answer: 100ms_to_300ms"
+
+  CONTEXT:
+    The P95 API response time determines whether a Redis cache layer is required
+    and whether PgBouncer connection pooling must be configured for the MVP.
+    A 'fast' target without specifics prevents a deterministic stack selection.
+
+  IF NOT ANSWERED BY DEADLINE:
+    Pipeline remains halted. This is a required architectural decision.
+
+QUESTION CQ-CR-2026-001-02 [AMB-2]
+  Field:    section12.rto
+  Current:  null
+  Assigned: TECH_LEAD
+
+  QUESTION TEXT:
+    "The Recovery Time Objective (RTO) — the maximum acceptable downtime
+     after an incident — was not specified. Please select one:
+
+     Options:
+       (a) under_15min  — Near-zero downtime; requires hot standby
+       (b) 15min_to_1hr  — Standard; achievable with monitoring + manual failover
+       (c) 1hr_to_4hr  — Acceptable; most bootstrap SaaS can tolerate this
+       (d) over_4hr  — Low priority; no formal recovery SLA
+
+     Example answer: 1hr_to_4hr"
+
+  IF NOT ANSWERED BY DEADLINE:
+    Assumed: 1hr_to_4hr (logged as ASSUMPTION-001)
+
+[AMB-3 questions batched into separate low-priority review — no deadline]
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 3 — Responses Received
+
+```
+RESPONSE LOG (received within 24 hours)
+──────────────────────────────────────────────────────────────────────────
+CQ-CR-2026-001-01:
+  Responded by:  FOUNDER (as TECH_LEAD)
+  Responded at:  2026-02-01T20:30:00Z
+  Answer:        "100ms_to_300ms"
+  Validation:    ✅ PASSED (valid enum value)
+  Applied:       section11.targetApiP95 = "100ms_to_300ms"
+
+CQ-CR-2026-001-02:
+  Responded by:  FOUNDER
+  Responded at:  2026-02-01T20:32:00Z
+  Answer:        "1hr_to_4hr"
+  Validation:    ✅ PASSED
+  Applied:       section12.rto = "1hr_to_4hr"
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 4 — Cascade Check + Re-validation
+
+```
+CASCADE SCAN RESULTS
+──────────────────────────────────────────────────────────────────────────
+targetApiP95 = "100ms_to_300ms" cascades to:
+  → cacheLayerRequired: re-validate
+    Result: no new ambiguity (cacheLayerRequired = true was already set)
+  → connectionPooling: re-validate
+    Result: no new ambiguity (connectionPooling = pgbouncer already set)
+
+rto = "1hr_to_4hr" cascades to:
+  → backupStrategy: re-validate
+    Result: ASSUMPTION-001 created (backupStrategy = "daily_snapshot" assumed)
+
+No new AMB-1 ambiguities created.
+──────────────────────────────────────────────────────────────────────────
+
+RE-VALIDATION RESULTS
+  Critical ambiguities:  0
+  Warning ambiguities:   0  (AMB-002 resolved; ASSUMPTION-001 logged)
+  Info ambiguities:      1  (AMB-003 unchanged — no architectural impact)
+  Ambiguity Score:       99/100
+  Readiness Status:      ✅ READY
+  Intake Status:         APPROVED
+
+PIPELINE RE-ENTRY:
+  Scope: FULL (AMB-1 field resolved → re-run from Phase 1)
+  Re-entry point: PRD_GENERATION.md Phase 1
+──────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### Flow B — Series-A B2B: Multi-Tenancy Model Conflict
+
+**Scenario:** A product team at a Series-A B2B startup submits an intake form.
+The form has a cross-field contradiction between the multi-tenancy model and
+the declared RBAC role structure.
+
+#### Step 1 — Ambiguity Detection
+
+```
+AMBIGUITY REPORT
+──────────────────────────────────────────────────────────────────────────
+Intake Form ID:    intake-flow-b-series-a-001
+Generated At:      2026-02-10T09:00:00Z
+Total Ambiguities: 2
+  Critical (AMB-1): 1 (cross-field contradiction XC-004)
+  Warning  (AMB-2): 1
+  Info     (AMB-3): 0
+
+Ambiguity Score:   75/100
+Readiness Status:  HALTED
+
+DETECTED AMBIGUITIES:
+  AMB-010
+    Type:     AMB-X (Contradictory)
+    Severity: AMB-1
+    Rule:     XC-004
+    Field A:  section3.multiTenancyModel = "multi_tenant"
+    Field B:  section4.rbacRoles = ["admin", "user", "viewer"] (global, not tenant-scoped)
+    Impact:   Cannot determine whether RBAC roles are global or tenant-scoped.
+              This changes the database schema (join tables vs tenant_id columns),
+              the session token structure, and the middleware routing.
+
+  AMB-011
+    Type:     AMB-V (Vague)
+    Severity: AMB-2
+    Field:    section3.tenantOnboardingModel = "self-serve or manual, we're not sure"
+    Impact:   Cannot determine whether a tenant provisioning API is needed for MVP.
+    Assumption: "self_service" (most common B2B SaaS pattern)
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 2 — Clarification Request
+
+```
+CLARIFICATION REQUEST CR-2026-005
+──────────────────────────────────────────────────────────────────────────
+Priority:  URGENT
+Deadline:  48 hours
+
+QUESTION CQ-CR-2026-005-01 [AMB-1, XC-004]
+  Assigned: CTO (primary per routing matrix for multi-tenancy + access control)
+  Escalate: TECH_LEAD
+
+  QUESTION TEXT:
+    "The intake declares a multi-tenant system (multiTenancyModel = multi_tenant)
+     but the RBAC roles [admin, user, viewer] are defined without tenant scoping.
+     This creates a structural ambiguity: are roles assigned globally to users,
+     or scoped per tenant?
+
+     The two interpretations lead to different database schemas:
+       (a) Global roles: user has a single role across all tenants
+           → Simple junction table: user_roles(user_id, role_id)
+           → A user who is 'admin' in Tenant A is also 'admin' in Tenant B
+
+       (b) Tenant-scoped roles: user has a role per tenant
+           → Tenant-scoped junction: tenant_user_roles(tenant_id, user_id, role_id)
+           → A user can be 'admin' in Tenant A and 'viewer' in Tenant B
+
+     Please confirm which model your system requires:
+       (a) global_roles
+       (b) tenant_scoped_roles
+
+     Example answer: tenant_scoped_roles"
+
+  CONTEXT:
+    In multi-tenant B2B SaaS, tenant-scoped roles are almost always required
+    because enterprise customers expect independent user management per account.
+    However, if your system will never allow a user to belong to multiple tenants,
+    global roles may be correct.
+
+  IF NOT ANSWERED BY DEADLINE:
+    Pipeline remains halted. Database schema cannot be designed without this decision.
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 3 — Response + Conflict
+
+```
+CQ-CR-2026-005-01 Response Round 1:
+  CPO answered: "global_roles" (answered on behalf of CTO who was traveling)
+  CTO answered (3 hours later): "tenant_scoped_roles"
+
+CONFLICT DETECTED: CONFLICT-001
+  Type: TYPE-C (Scope conflict — CPO and CTO disagree)
+  Conflict: CPO says global, CTO says tenant-scoped
+  Escalation: Both responses shown to FOUNDER
+
+FOUNDER decision (received 6 hours after conflict detected):
+  "Tenant-scoped. We're B2B. Customers will absolutely expect independent
+   admin panels."
+  Answer: tenant_scoped_roles
+
+CONFLICT RESOLVED:
+  finalValue: tenant_scoped_roles
+  resolvedBy: FOUNDER (TYPE-C tiebreaker)
+  resolutionMethod: CONFLICT_RESOLUTION
+```
+
+#### Step 4 — Cascade + Re-validation
+
+```
+CASCADE: rbacRoles updated to indicate tenant-scoped
+  → section4.rbacRoleScope confirmed as "tenant_scoped"
+  → session strategy re-validate:
+    sessionStrategy = "jwt" → NEW AMB-2 CREATED
+    AMB-012: jwt sessions do not carry tenant-scoped role claims by default.
+    Assumption: Add tenantId + tenantRole claim to JWT payload
+                (documented in PRD as ASSUMPTION-002)
+
+FINAL STATUS:
+  Critical ambiguities:  0
+  Warning ambiguities:   1  (AMB-012 auto-assumed, no halt)
+  Ambiguity Score:       95/100
+  Readiness Status:      ✅ PROCEED_WITH_ASSUMPTIONS
+  Intake Status:         APPROVED (with 2 documented assumptions)
+
+Pipeline re-entry: PRD_GENERATION.md Phase 2
+  (Archetype already stable; re-check from archetype selection forward
+   since RBAC schema change affects modular_monolith module boundaries)
+```
+
+---
+
+### Flow C — Enterprise: Compliance Framework Contradiction
+
+**Scenario:** An enterprise product team submits an intake form declaring both HIPAA
+compliance and an external AI provider (OpenAI) without mentioning a BAA.
+This triggers the critical cross-field rule XC-003.
+
+#### Step 1 — Ambiguity Detection
+
+```
+AMBIGUITY REPORT
+──────────────────────────────────────────────────────────────────────────
+Intake Form ID:    intake-flow-c-enterprise-001
+Generated At:      2026-02-15T10:00:00Z
+Total Ambiguities: 3
+  Critical (AMB-1): 2
+  Warning  (AMB-2): 1
+  Info     (AMB-3): 0
+
+Ambiguity Score:   59/100  (100 - 20 - 20 - 5 = 55; adjusted to 59 for partial
+                             documentation but still HALTED)
+Readiness Status:  HALTED
+
+DETECTED AMBIGUITIES:
+  AMB-020
+    Type:     AMB-X (Contradictory)
+    Severity: AMB-1
+    Rule:     XC-003
+    Field A:  section13.complianceFrameworks = ["hipaa", "soc2_type2"]
+    Field B:  section10.aiProvider = ["openai"]
+    Impact:   Sending PHI to OpenAI without a BAA violates HIPAA.
+              The pipeline cannot prescribe an AI stack until the BAA
+              status is confirmed.
+
+  AMB-021
+    Type:     AMB-M (Missing)
+    Severity: AMB-1
+    Field:    section5.dataRetentionPolicy
+    Current:  null
+    Impact:   HIPAA requires a documented data retention policy.
+              Cannot generate compliance requirements without it.
+
+  AMB-022
+    Type:     AMB-V (Vague)
+    Severity: AMB-2
+    Field:    section13.encryptionRequirements
+    Current:  "standard encryption"
+    Impact:   Cannot determine whether field-level encryption (FLE)
+              is required. Different encryption scopes have significant
+              infrastructure cost differences.
+    Assumption: [encryption_at_rest, encryption_in_transit] (minimum HIPAA baseline)
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 2 — Clarification Request (Round 1)
+
+```
+CLARIFICATION REQUEST CR-2026-010
+──────────────────────────────────────────────────────────────────────────
+Priority:   URGENT (2 Critical)
+Deadline:   48 hours
+Assigned:   SEC_LEAD (primary for compliance) + LEGAL (escalation)
+
+QUESTION CQ-CR-2026-010-01 [AMB-1, XC-003]
+  QUESTION TEXT:
+    "The intake declares HIPAA compliance (complianceFrameworks = [hipaa, soc2_type2])
+     and OpenAI as the AI provider. Under HIPAA, sending Protected Health Information (PHI)
+     to an external AI provider requires a signed Business Associate Agreement (BAA).
+
+     OpenAI does NOT offer a HIPAA BAA for its standard API.
+     Microsoft Azure OpenAI DOES offer a HIPAA BAA addendum.
+
+     Please confirm the status of your AI provider decision:
+       (a) openai_with_phi_scrubbing — Continue with OpenAI but implement a PHI
+           detection and scrubbing layer before any data leaves the system boundary.
+           No PHI will be sent to OpenAI. BAA not required.
+       (b) azure_openai_with_baa — Switch to Azure OpenAI and sign the HIPAA BAA.
+           PHI may be processed by the AI. BAA required and must be confirmed.
+       (c) no_external_ai — Remove AI feature from MVP. Self-host or defer.
+       (d) ai_deferred — Defer AI feature to Phase 2 after compliance review.
+
+     Example answer: azure_openai_with_baa"
+
+QUESTION CQ-CR-2026-010-02 [AMB-1]
+  QUESTION TEXT:
+    "The data retention policy was not specified. HIPAA requires a documented
+     retention schedule for PHI. Please provide:
+
+     (a) defaultRetentionDays:   How long is PHI retained by default? (integer, 1–3650)
+     (b) auditLogRetentionDays:  How long are HIPAA audit logs retained? (integer, min 2555)
+                                  (HIPAA requires 6 years = 2190 days minimum)
+
+     Example answer:
+       defaultRetentionDays: 365
+       auditLogRetentionDays: 2555"
+
+[AMB-022 question batched separately as NORMAL priority — AMB-2 only]
+──────────────────────────────────────────────────────────────────────────
+```
+
+#### Step 3 — Responses Received
+
+```
+CQ-CR-2026-010-01 (AI provider decision):
+  Answered by: SEC_LEAD
+  Answer:      "azure_openai_with_baa"
+  Validation:  ✅ PASSED
+  Applied:     aiProvider = ["azure_openai"]
+               aiDataPrivacy = "no_external_ai_without_baa" (added field)
+  Note:        SEC_LEAD confirms: "Azure OpenAI BAA will be signed before any
+               PHI is processed. Implementation is blocked until BAA is executed."
+               → ADR-007 generated in PRD: AI Stack — PROVISIONAL until BAA confirmed
+
+CQ-CR-2026-010-02 (data retention):
+  Answered by: LEGAL
+  Answer:      defaultRetentionDays: 730 (2 years)
+               auditLogRetentionDays: 2555 (7 years)
+  Validation:  ✅ PASSED (auditLogRetentionDays ≥ 2190 ✓)
+  Applied:     dataRetentionPolicy.defaultRetentionDays = 730
+               dataRetentionPolicy.auditLogRetentionDays = 2555
+```
+
+#### Step 4 — Cascade + Round 2 Clarification
+
+```
+CASCADE from aiProvider = azure_openai:
+  → aiDataPrivacy: re-validate
+    Result: No new ambiguity (set correctly to "no_external_ai_without_baa")
+  → deploymentPlatform: re-validate
+    Result: azure_openai requires Azure or compatible cloud.
+            Current deploymentPlatform = "aws"
+            → NEW AMB-1 CREATED: AMB-023
+              Type: AMB-X (Contradictory)
+              Fields: aiProvider = [azure_openai] + deploymentPlatform = aws
+              Impact: Azure OpenAI must be accessed via Azure API endpoint.
+                      AWS deployment can call Azure OpenAI API; no architecture conflict.
+                      But VNet peering may be required for compliance.
+              Automated resolution: This is a known-safe cross-cloud call.
+                                    Mark as AMB-2 (downgrade from initial AMB-1).
+              Revised: AMB-023 severity = AMB-2, assumption = cross_cloud_api_call
+
+ROUND 2: Single AMB-2 question sent for AMB-023 + original AMB-022
+  Both resolved within 5 business days.
+  AMB-022: encryptionRequirements confirmed = [encryption_at_rest, encryption_in_transit,
+            field_level_encryption, key_management_service] (LEGAL confirmed full set)
+  AMB-023: deploymentPlatform confirmed = aws (Azure OpenAI accessible via HTTPS; no VNet
+            required for standard API usage)
+
+FINAL STATUS:
+  Critical ambiguities:  0
+  Warning ambiguities:   0
+  Ambiguity Score:       100/100
+  Readiness Status:      ✅ READY
+  Intake Status:         APPROVED
+
+  Documented Assumptions: 1
+    ASSUMPTION-003: encryptionRequirements initially vague;
+                    confirmed as full set by LEGAL.
+    requiresHumanReview: false (confirmed by authorized stakeholder)
+
+  Provisional Sections: 1
+    ADR-007 (AI Stack): PROVISIONAL — pending BAA execution confirmation.
+    PRD AI section marked PROVISIONAL until BAA is signed and recorded.
+
+Pipeline re-entry: PRD_GENERATION.md Phase 1
+  (Full re-run: compliance frameworks changed, tension rules must re-fire)
+```
+
+---
+
+## Clarification Process Version History
+
+```
+Version 1.0.0 — Initial release
+  Added: Complete 6-part clarification process specification
+  Added: Part 1 — Ambiguity Classification (6 types, 3 severity levels)
+  Added: Part 1 — Field-level ambiguity detection rules for all 25 intake sections
+  Added: Part 1 — Cross-field contradiction rules XC-001 through XC-010
+  Added: Part 1 — Ambiguity scoring model (0–100) with readiness bands
+  Added: Part 1 — Pipeline halt conditions (HALT-001 through HALT-005)
+  Added: Part 2 — Clarification Request structure and generation rules
+  Added: Part 2 — Question generation templates by ambiguity type
+  Added: Part 2 — Question batching strategy (5 rules, sequential dependency handling)
+  Added: Part 2 — Escalation levels L1–L5 with deadlines and auto-actions
+  Added: Part 2 — 7 forbidden clarification patterns with correct alternatives
+  Added: Part 3 — Stakeholder role catalogue (9 roles)
+  Added: Part 3 — Question-to-stakeholder routing matrix (all 25 sections + cross-field)
+  Added: Part 3 — Multi-stakeholder conflict protocol (3 conflict types, resolution paths)
+  Added: Part 3 — Delivery channel rules and response deadline policy
+  Added: Part 4 — Response validation rules RV-001 through RV-007
+  Added: Part 4 — Intake field update protocol (6-step transaction)
+  Added: Part 4 — Cascade dependency map (11 field categories)
+  Added: Part 4 — Re-validation sequence after update
+  Added: Part 4 — Response-field conflict handling
+  Added: Part 5 — Automated assumption catalogue (20 fields with safe defaults)
+  Added: Part 5 — Assumption documentation template
+  Added: Part 5 — Resolution state machine (12 states, all valid transitions)
+  Added: Part 5 — Convergence criteria (5 required conditions)
+  Added: Part 5 — Maximum clarification budget (5 rounds, 3 CRs/round, 10 questions/CR)
+  Added: Part 5 — Forced resolution rules (10 field forced values + human review requirement)
+  Added: Part 6 — Re-entry point matrix (9 field categories → specific pipeline phases)
+  Added: Part 6 — Partial vs full pipeline re-run decision rules
+  Added: Part 6 — Post-freeze clarification protocol (3 severity paths: CRITICAL/MATERIAL/MINOR)
+  Added: Part 6 — Clarification audit trail structure and use cases
+  Added: TypeScript interfaces (10 enums, 12 interfaces, full type coverage)
+  Added: Zod validation schemas (all entities with cross-field refinements)
+  Added: Three complete clarification flow examples (Bootstrap, Series-A, Enterprise)
+  Framework: Next.js (primary)
+  Status: ACTIVE
+
+Planned: Version 1.1.0
+  - Add clarification process for mobile app (React Native) intake sections
+  - Add automated CI/CD pipeline integration for GitHub comment delivery channel
+  - Add Slack delivery channel integration specification
+  - Add clarification metrics dashboard specification
+    (average time to resolution, most commonly ambiguous fields, etc.)
+  - Add multi-language support for question text generation
+```
+
+---
+
+*End of CLARIFICATION_PROCESS.md — Document 3 of 4*
+*Next: See `FINALIZATION.md` for the final tech stack document, project overview, and build contract.*
