@@ -1850,3 +1850,973 @@ the specific changes made, creating a full audit trail.
 ──────────────────────────────────────────────────────────────────────────────
 ```
 
+
+---
+
+## Phase 7 — PRD Approval & Freeze Workflow
+
+Phase 7 manages the transition from a quality-passing PRD draft to a stakeholder-approved,
+immutable frozen document that unlocks downstream pipeline stages.
+
+### 7A — Approval State Machine
+
+```
+PRD STATUS STATE MACHINE
+══════════════════════════════════════════════════════════════════════
+
+  DRAFT ──────────────────────────────────────────────► UNDER_REVIEW
+    │  (Phase 4 complete, Quality Gate not yet run)    (Quality Gate ≥ 85)
+    │
+    │  Quality Gate < 85
+    ▼
+  REVISION_REQUIRED ──────────────────────────────────► UNDER_REVIEW
+    (Phase 6 iteration in progress)                   (After iteration passes)
+
+  UNDER_REVIEW ───────────────────────────────────────► APPROVED
+    │  (Awaiting stakeholder sign-offs)               (All required approvals obtained)
+    │
+    │  Stakeholder requests changes
+    ▼
+  REVISION_REQUIRED
+
+  APPROVED ────────────────────────────────────────────► FROZEN
+    │  (All sign-offs collected, cooling-off period)  (Freeze triggered by team lead)
+    │
+    │  Critical issue discovered pre-freeze
+    ▼
+  UNDER_REVIEW
+
+  FROZEN (TERMINAL STATE)
+    → No mutations permitted
+    → All downstream documents reference this frozen PRD ID
+    → New intake form required to change any requirement
+
+══════════════════════════════════════════════════════════════════════
+
+VALID TRANSITIONS:
+  DRAFT           → UNDER_REVIEW        (trigger: quality gate passed)
+  DRAFT           → REVISION_REQUIRED   (trigger: quality gate failed)
+  REVISION_REQUIRED → UNDER_REVIEW      (trigger: iteration passed quality gate)
+  UNDER_REVIEW    → APPROVED            (trigger: all required approvals received)
+  UNDER_REVIEW    → REVISION_REQUIRED   (trigger: stakeholder requested changes)
+  APPROVED        → FROZEN              (trigger: team lead confirms freeze)
+  APPROVED        → UNDER_REVIEW        (trigger: critical pre-freeze issue found)
+
+INVALID TRANSITIONS (pipeline rejects):
+  FROZEN → any state    (terminal; requires new intake form)
+  APPROVED → DRAFT      (cannot regress past review)
+  FROZEN → DRAFT        (terminal; no regression)
+```
+
+---
+
+### 7B — Stakeholder Sign-Off Matrix
+
+The required approvers are determined by the funding stage and compliance requirements:
+
+```
+SIGN-OFF MATRIX BY CONTEXT
+══════════════════════════════════════════════════════════════════════
+
+BOOTSTRAP / SOLO:
+  Required:  1 sign-off (Founder / Technical Lead)
+  Optional:  Early customer validation
+
+SEED / SMALL TEAM:
+  Required:  2 sign-offs
+    ✓ Technical Lead (architecture accuracy)
+    ✓ Product Owner (feature completeness, business goals)
+  Optional:  Investor / Advisor
+
+SERIES-A / MEDIUM TEAM:
+  Required:  3 sign-offs
+    ✓ CTO / Engineering Lead (technical architecture)
+    ✓ Product Manager (user requirements, success metrics)
+    ✓ Design Lead (UX requirements, persona accuracy)
+  Optional:  Legal (if compliance frameworks declared)
+
+SERIES-B+ / ENTERPRISE:
+  Required:  4–6 sign-offs
+    ✓ CTO (architecture ownership)
+    ✓ VP of Engineering (delivery plan feasibility)
+    ✓ CPO / Product Director (product definition)
+    ✓ Security Lead (security and compliance requirements)
+    ✓ Legal / Compliance Officer (if compliance frameworks declared)
+    ✓ Finance Lead (if infrastructure budget declared)
+
+COMPLIANCE-DRIVEN ADDITIONAL APPROVERS:
+  IF complianceFrameworks includes hipaa:
+    + HIPAA Compliance Officer (required; cannot freeze without this)
+  IF complianceFrameworks includes soc2_type2:
+    + Security Officer (required)
+  IF complianceFrameworks includes gdpr:
+    + Data Protection Officer (required if large-scale processing)
+  IF complianceFrameworks includes pci_dss:
+    + QSA (Qualified Security Assessor) review recommended
+
+══════════════════════════════════════════════════════════════════════
+
+SIGN-OFF RECORD FORMAT:
+  Approver:    {name}
+  Role:        {role}
+  Approved At: {ISO 8601 timestamp}
+  Method:      Digital signature | Documented email | Pull request approval
+  Comments:    {optional comments}
+  Conditions:  {any conditions attached to approval}
+```
+
+---
+
+### 7C — Immutability Contract
+
+```
+IMMUTABILITY CONTRACT
+──────────────────────────────────────────────────────────────────────────────
+Once a PRD reaches status = FROZEN:
+
+RULE-IMM-001  No field in the PRD document may be modified.
+RULE-IMM-002  No section may be added or removed.
+RULE-IMM-003  The frozen PRD ID ({prdId}) is permanently associated with
+              the Intake Form ID ({intakeFormId}).
+RULE-IMM-004  All downstream documents (CLARIFICATION_PROCESS.md outputs,
+              FINALIZATION.md outputs, database schema, API contracts) MUST
+              reference the frozen PRD ID.
+RULE-IMM-005  If any requirement changes after freeze, a NEW intake form must
+              be created. The new intake goes through the full pipeline from
+              Phase 1. The existing frozen PRD is NOT modified.
+RULE-IMM-006  A PRD supersession record is created linking the old frozen PRD
+              to the new PRD when the new PRD is frozen.
+RULE-IMM-007  The frozen PRD is stored in version control with an immutable tag:
+              prd/{prdId}/frozen
+
+RATIONALE:
+  Immutability ensures that:
+  - Database schemas built from this PRD have a stable reference
+  - API contracts designed from this PRD do not drift
+  - Team members working from this PRD are not surprised by silent changes
+  - Audit trails for compliance can reference a stable document
+
+  "Change the inputs, not the outputs. If the inputs change,
+   run the pipeline again." — Pipeline Design Principle
+──────────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### 7D — Downstream Unlock Sequence
+
+When a PRD is frozen, it unlocks the following downstream pipeline stages in order:
+
+```
+DOWNSTREAM UNLOCK SEQUENCE
+══════════════════════════════════════════════════════════════════════
+
+Frozen PRD → UNLOCKS:
+
+  STEP 1  CLARIFICATION_PROCESS.md (Document 3)
+          └─ Ambiguity resolution for any remaining open questions
+          └─ Only if open ambiguities exist in the frozen PRD
+          └─ If no ambiguities: skip directly to Step 2
+
+  STEP 2  FINALIZATION.md (Document 4)
+          └─ Final tech stack document (exhaustive, code-ready)
+          └─ Project overview / build contract
+          └─ Database schema design brief
+          └─ API contract specification brief
+
+  STEP 3  FOLDER_STRUCTURE generation
+          └─ Final folder structure for the specific project
+          └─ Derived from archetype + tech stack + feature set
+
+  STEP 4  DATABASE SCHEMA DESIGN
+          └─ Prisma schema generation from data model in PRD Block 5.4
+          └─ Migration strategy from intake Section 18
+
+  STEP 5  API CONTRACT SPECIFICATION
+          └─ OpenAPI spec generation from PRD Block 5.5
+          └─ Zod schema generation for all request/response types
+
+  STEP 6  ENGINEERING TASK BREAKDOWN
+          └─ Sprint plan from PRD Block 9.2 converted to engineering tasks
+          └─ Dependencies from PRD Block 9.3
+
+══════════════════════════════════════════════════════════════════════
+
+unlock_log format:
+  {
+    prd_frozen_at:         "ISO 8601 timestamp",
+    prd_id:                "PRD-{YYYY}-{sequence}",
+    intake_form_id:        "UUID",
+    downstream_unlocked:   true,
+    unlock_sequence_state: {
+      clarification:       "SKIPPED | IN_PROGRESS | COMPLETE",
+      finalization:        "PENDING | IN_PROGRESS | COMPLETE",
+      folder_structure:    "PENDING | IN_PROGRESS | COMPLETE",
+      database_schema:     "PENDING | IN_PROGRESS | COMPLETE",
+      api_contracts:       "PENDING | IN_PROGRESS | COMPLETE",
+      task_breakdown:      "PENDING | IN_PROGRESS | COMPLETE"
+    }
+  }
+```
+
+---
+
+## TypeScript Interfaces
+
+The following interfaces define the complete type system for the PRD generation pipeline.
+All pipeline code operates on these types. No `any` types are permitted.
+
+```typescript
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export enum RiskLevel {
+  Low      = "Low",
+  Medium   = "Medium",
+  High     = "High",
+  Critical = "Critical",
+}
+
+export enum TensionSeverity {
+  Critical = "CRIT",
+  Warning  = "WARN",
+  Info     = "INFO",
+}
+
+export enum ArchitectureArchetype {
+  Monolith        = "monolith",
+  ModularMonolith = "modular_monolith",
+  Microservices   = "microservices",
+}
+
+export enum ArchetypeSelectionMethod {
+  Forced    = "FORCED",
+  Suggested = "SUGGESTED",
+  Default   = "DEFAULT",
+}
+
+export enum PRDStatus {
+  Draft               = "DRAFT",
+  RevisionRequired    = "REVISION_REQUIRED",
+  UnderReview         = "UNDER_REVIEW",
+  Approved            = "APPROVED",
+  Frozen              = "FROZEN",
+  ManualReviewRequired = "MANUAL_REVIEW_REQUIRED",
+}
+
+export enum FeaturePriority {
+  P0 = "P0",  // MVP — required for launch
+  P1 = "P1",  // Phase 2 — immediately post-MVP
+  P2 = "P2",  // Phase 3 — growth stage
+  P3 = "P3",  // Future — no committed date
+}
+
+export enum ADRStatus {
+  Accepted    = "ACCEPTED",
+  Superseded  = "SUPERSEDED",
+  Deprecated  = "DEPRECATED",
+}
+
+export enum RiskCategory {
+  Technical    = "Technical",
+  Business     = "Business",
+  Compliance   = "Compliance",
+  Operational  = "Operational",
+}
+
+export enum RiskLikelihood {
+  Low    = "LOW",
+  Medium = "MEDIUM",
+  High   = "HIGH",
+}
+
+export enum RiskImpact {
+  Low      = "LOW",
+  Medium   = "MEDIUM",
+  High     = "HIGH",
+  Critical = "CRITICAL",
+}
+
+export enum RiskStatus {
+  Open       = "OPEN",
+  Mitigating = "MITIGATING",
+  Resolved   = "RESOLVED",
+  Accepted   = "ACCEPTED",
+}
+
+export enum QualityGateStatus {
+  Passed                = "QUALITY_GATE_PASSED",
+  FailedSoft            = "QUALITY_GATE_FAILED_SOFT",
+  FailedHard            = "QUALITY_GATE_FAILED_HARD",
+  ConsistencyFailure    = "QUALITY_GATE_CONSISTENCY_FAILURE",
+}
+
+export enum EvolutionStage {
+  Stage1 = "STAGE_1_LEAN_MVP",
+  Stage2 = "STAGE_2_SCALABLE_STARTUP",
+  Stage3 = "STAGE_3_ENTERPRISE_GRADE",
+}
+
+export enum DownstreamStage {
+  Clarification    = "clarification",
+  Finalization     = "finalization",
+  FolderStructure  = "folder_structure",
+  DatabaseSchema   = "database_schema",
+  ApiContracts     = "api_contracts",
+  TaskBreakdown    = "task_breakdown",
+}
+
+export enum DownstreamStageStatus {
+  Skipped     = "SKIPPED",
+  Pending     = "PENDING",
+  InProgress  = "IN_PROGRESS",
+  Complete    = "COMPLETE",
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1 — STABILITY ANALYSIS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Tension {
+  id:            string;           // e.g., "TENSION-001"
+  severity:      TensionSeverity;
+  ruleId:        string;           // e.g., "T-BS-001"
+  fieldA:        { name: string; value: unknown };
+  fieldB:        { name: string; value: unknown };
+  description:   string;
+  scoreImpact:   number;           // 0, 10, or 25
+  mitigation:    string;
+}
+
+export interface AmplificationResult {
+  ruleId:        string;           // e.g., "AMPLIFICATION_RULE_A"
+  triggered:     boolean;
+  additionalDeduction: number;
+  message:       string;
+}
+
+export interface TensionReport {
+  tensions:               Tension[];
+  amplifications:         AmplificationResult[];
+  criticalCount:          number;
+  warningCount:           number;
+  infoCount:              number;
+  totalScoreDeducted:     number;
+}
+
+export interface StabilityAnalysis {
+  baseScore:        100;
+  tensionReport:    TensionReport;
+  finalScore:       number;        // 0–100
+  riskLevel:        RiskLevel;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 2 — ARCHETYPE DECISION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ArchetypeDecision {
+  selectedArchetype:        ArchitectureArchetype;
+  selectionMethod:          ArchetypeSelectionMethod;
+  matchedRuleId:            string;           // which matrix rule fired
+  archetypeOverridden:      boolean;
+  stakeholderPreference:    ArchitectureArchetype | null;
+  reasoning:                string;
+  forcingConditions:        string[];         // populated if selectionMethod = FORCED
+  unlockConditions:         string[];         // what must change to unlock preferred archetype
+}
+
+export interface EvolutionStageDefinition {
+  stage:           EvolutionStage;
+  archetype:       ArchitectureArchetype;
+  durationNote:    string;
+  changes:         string[];
+  teamGrowthPlan:  string;
+  budgetEstimate:  string;
+  trigger:         string;         // what metric unlocks transition to this stage
+}
+
+export interface EvolutionRoadmap {
+  stages:                  EvolutionStageDefinition[];
+  stage1to2Triggers:       string[];
+  stage2to3Triggers:       string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 3 — STACK MANIFEST
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StackDecision {
+  layer:           string;         // e.g., "database", "cache", "auth"
+  selected:        string;         // e.g., "PostgreSQL via Neon"
+  rationale:       string;
+  alternatives:    string[];
+  forced:          boolean;
+  forcingReason:   string | null;
+  adrs:            string[];       // ADR IDs that document this decision
+}
+
+export interface StackManifest {
+  frontend:        StackDecision;
+  backend:         StackDecision;
+  database:        StackDecision;
+  orm:             StackDecision;
+  cache:           StackDecision | null;
+  auth:            StackDecision;
+  queue:           StackDecision | null;
+  storage:         StackDecision | null;
+  observability:   StackDecision;
+  hosting:         StackDecision;
+  cicd:            StackDecision;
+  additionalTools: StackDecision[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 4 — PRD DOCUMENT STRUCTURES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PRDMetadata {
+  prdId:              string;      // "PRD-{YYYY}-{sequence}"
+  intakeFormId:       string;      // UUID from intake
+  prdRunId:           string;      // UUID for this generation run
+  prdVersion:         string;      // semver
+  prdStatus:          PRDStatus;
+  generatedAt:        Date;
+  generatedBy:        string;
+  pipelineVersion:    string;
+  stabilityScore:     number;
+  riskLevel:          RiskLevel;
+  selectedArchetype:  ArchitectureArchetype;
+  selectionMethod:    ArchetypeSelectionMethod;
+  archetypeOverridden: boolean;
+  qualityScore:       number | null;
+  qualityPassed:      boolean | null;
+  iterations:         number;
+  approvedBy:         SignOff[];
+  approvedAt:         Date | null;
+  frozenAt:           Date | null;
+  downstreamUnlocked: boolean;
+}
+
+export interface SignOff {
+  approverName:   string;
+  approverRole:   string;
+  approvedAt:     Date;
+  method:         "digital_signature" | "documented_email" | "pr_approval";
+  comments:       string | null;
+  conditions:     string | null;
+}
+
+export interface UserPersona {
+  personaId:             string;
+  personaName:           string;
+  personaRole:           string;
+  description:           string;
+  primaryGoal:           string;
+  secondaryGoal:         string;
+  primaryFrustration:    string;
+  secondaryFrustration:  string;
+  technicalProficiency:  "none" | "basic" | "intermediate" | "advanced" | "expert";
+  usageFrequency:        "daily" | "weekly" | "monthly" | "occasional";
+  keyFeatures:           string[];
+  successDefinition:     string;
+}
+
+export interface UserStory {
+  storyId:       string;      // "US-{featureId}-{n}"
+  featureId:     string;
+  personaId:     string;
+  asA:           string;      // persona name
+  iWant:         string;      // action
+  soThat:        string;      // outcome
+  priority:      FeaturePriority;
+  acceptanceCriteria: AcceptanceCriterion[];
+  estimatedEffort: "S" | "M" | "L" | "XL";
+}
+
+export interface AcceptanceCriterion {
+  acId:          string;      // "AC-{storyId}-{n}"
+  storyId:       string;
+  given:         string;
+  when:          string;
+  then:          string;
+  additionalAssertions: string[];
+}
+
+export interface Feature {
+  featureId:     string;
+  featureName:   string;
+  priority:      FeaturePriority;
+  category:      "Core" | "Auth" | "Admin" | "Integration" | "Infrastructure";
+  description:   string;
+  personaIds:    string[];
+  dependencies:  string[];
+  userStories:   UserStory[];
+  technicalNotes: string[];
+  estimatedEffort: "S" | "M" | "L" | "XL";
+  phase:         number;
+}
+
+export interface ADR {
+  adrId:         string;      // "ADR-{NNN}"
+  title:         string;
+  date:          Date;
+  status:        ADRStatus;
+  deciders:      string[];
+  prdVersion:    string;
+  context:       string;
+  decision:      string;
+  options:       { label: string; pros: string[]; cons: string[] }[];
+  selectedOption: string;
+  rationale:     string;
+  intakeFieldsConsidered: { fieldName: string; value: unknown }[];
+  forcingConditions: string[];
+  positiveConsequences: string[];
+  negativeConsequences: string[];
+  reversibility:  "EASY" | "MODERATE" | "DIFFICULT" | "IRREVERSIBLE";
+  reversalPlan:   string | null;
+  followUpActions: { action: string; owner: string; dueDate: Date }[];
+}
+
+export interface Risk {
+  riskId:        string;      // "RISK-{NNN}"
+  category:      RiskCategory;
+  source:        string;      // tension ID, "Standard", or "Manual"
+  description:   string;
+  likelihood:    RiskLikelihood;
+  impact:        RiskImpact;
+  riskScore:     "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  mitigation:    string;
+  owner:         string;
+  reviewDate:    Date;
+  status:        RiskStatus;
+}
+
+export interface PerformanceRequirement {
+  nfrId:         string;      // "NFR-P-{n}"
+  metric:        string;
+  target:        string;
+  condition:     string;
+  enforcement:   string;
+  owner:         string;
+}
+
+export interface ComplianceRequirement {
+  nfrId:         string;      // "NFR-C-{n}"
+  framework:     string;
+  obligations:   string[];
+  targetDate:    string;
+  evidenceRequired: string[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 5 — QUALITY GATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SectionScore {
+  sectionId:     string;
+  sectionName:   string;
+  maxPoints:     number;
+  earnedPoints:  number;
+  remediationInstruction: string | null;
+}
+
+export interface ConsistencyCheckResult {
+  checkId:       string;      // "CC-{NNN}"
+  passed:        boolean;
+  description:   string;
+  deduction:     number;      // 0 if passed, 3 if failed
+  fix:           string | null;
+}
+
+export interface QualityReport {
+  prdRunId:               string;
+  iterationNumber:        number;
+  completenessScore:      number;
+  consistencyDeduction:   number;
+  finalScore:             number;
+  status:                 QualityGateStatus;
+  sectionScores:          SectionScore[];
+  consistencyChecks:      ConsistencyCheckResult[];
+  failedSections:         SectionScore[];
+  failedChecks:           ConsistencyCheckResult[];
+  generatedAt:            Date;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 7 — APPROVAL & DOWNSTREAM
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DownstreamUnlockLog {
+  prdFrozenAt:         Date;
+  prdId:               string;
+  intakeFormId:        string;
+  downstreamUnlocked:  boolean;
+  unlockSequenceState: Record<DownstreamStage, DownstreamStageStatus>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP-LEVEL: FULL PRD GENERATION RUN
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PRDGenerationRun {
+  // Inputs
+  intakeFormId:       string;
+  prdRunId:           string;
+
+  // Phase outputs
+  readinessCheckPassed: boolean;
+  readinessErrors:    string[];
+  stabilityAnalysis:  StabilityAnalysis;
+  archetypeDecision:  ArchetypeDecision;
+  evolutionRoadmap:   EvolutionRoadmap;
+  stackManifest:      StackManifest;
+  adrs:               ADR[];
+  risks:              Risk[];
+  features:           Feature[];
+  personas:           UserPersona[];
+  qualityReports:     QualityReport[];
+
+  // Final state
+  metadata:           PRDMetadata;
+  downstreamUnlockLog: DownstreamUnlockLog | null;
+}
+```
+
+---
+
+## Zod Validation Schemas
+
+```typescript
+import { z } from "zod";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const RiskLevelSchema = z.enum(["Low", "Medium", "High", "Critical"]);
+
+export const TensionSeveritySchema = z.enum(["CRIT", "WARN", "INFO"]);
+
+export const ArchetypeSchema = z.enum([
+  "monolith",
+  "modular_monolith",
+  "microservices",
+]);
+
+export const ArchetypeSelectionMethodSchema = z.enum([
+  "FORCED",
+  "SUGGESTED",
+  "DEFAULT",
+]);
+
+export const PRDStatusSchema = z.enum([
+  "DRAFT",
+  "REVISION_REQUIRED",
+  "UNDER_REVIEW",
+  "APPROVED",
+  "FROZEN",
+  "MANUAL_REVIEW_REQUIRED",
+]);
+
+export const FeaturePrioritySchema = z.enum(["P0", "P1", "P2", "P3"]);
+
+export const ADRStatusSchema = z.enum(["ACCEPTED", "SUPERSEDED", "DEPRECATED"]);
+
+export const RiskCategorySchema = z.enum([
+  "Technical",
+  "Business",
+  "Compliance",
+  "Operational",
+]);
+
+export const RiskScoreSchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+
+export const QualityGateStatusSchema = z.enum([
+  "QUALITY_GATE_PASSED",
+  "QUALITY_GATE_FAILED_SOFT",
+  "QUALITY_GATE_FAILED_HARD",
+  "QUALITY_GATE_CONSISTENCY_FAILURE",
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const TensionSchema = z.object({
+  id:          z.string().regex(/^TENSION-\d{3}$/),
+  severity:    TensionSeveritySchema,
+  ruleId:      z.string().regex(/^T-[A-Z]{2}-\d{3}$/),
+  fieldA:      z.object({ name: z.string(), value: z.unknown() }),
+  fieldB:      z.object({ name: z.string(), value: z.unknown() }),
+  description: z.string().min(10),
+  scoreImpact: z.union([z.literal(0), z.literal(10), z.literal(25)]),
+  mitigation:  z.string().min(10),
+});
+
+export const TensionReportSchema = z.object({
+  tensions:             z.array(TensionSchema),
+  amplifications:       z.array(z.object({
+    ruleId:             z.string(),
+    triggered:          z.boolean(),
+    additionalDeduction: z.number().int().min(0),
+    message:            z.string(),
+  })),
+  criticalCount:        z.number().int().min(0),
+  warningCount:         z.number().int().min(0),
+  infoCount:            z.number().int().min(0),
+  totalScoreDeducted:   z.number().int().min(0),
+});
+
+export const StabilityAnalysisSchema = z.object({
+  baseScore:     z.literal(100),
+  tensionReport: TensionReportSchema,
+  finalScore:    z.number().int().min(0).max(100),
+  riskLevel:     RiskLevelSchema,
+}).refine(
+  (d) => {
+    const computed = Math.max(0, d.baseScore - d.tensionReport.totalScoreDeducted);
+    return d.finalScore === computed;
+  },
+  { message: "finalScore must equal baseScore minus totalScoreDeducted (floored at 0)" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 2
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ArchetypeDecisionSchema = z.object({
+  selectedArchetype:     ArchetypeSchema,
+  selectionMethod:       ArchetypeSelectionMethodSchema,
+  matchedRuleId:         z.string(),
+  archetypeOverridden:   z.boolean(),
+  stakeholderPreference: ArchetypeSchema.nullable(),
+  reasoning:             z.string().min(20),
+  forcingConditions:     z.array(z.string()),
+  unlockConditions:      z.array(z.string()),
+}).refine(
+  (d) => {
+    if (d.archetypeOverridden) {
+      return d.selectionMethod === "FORCED" && d.forcingConditions.length > 0;
+    }
+    return true;
+  },
+  { message: "If archetypeOverridden is true, selectionMethod must be FORCED and forcingConditions must be non-empty" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 3
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const StackDecisionSchema = z.object({
+  layer:        z.string().min(1),
+  selected:     z.string().min(1),
+  rationale:    z.string().min(10),
+  alternatives: z.array(z.string()),
+  forced:       z.boolean(),
+  forcingReason: z.string().nullable(),
+  adrs:         z.array(z.string()),
+});
+
+export const StackManifestSchema = z.object({
+  frontend:        StackDecisionSchema,
+  backend:         StackDecisionSchema,
+  database:        StackDecisionSchema,
+  orm:             StackDecisionSchema,
+  cache:           StackDecisionSchema.nullable(),
+  auth:            StackDecisionSchema,
+  queue:           StackDecisionSchema.nullable(),
+  storage:         StackDecisionSchema.nullable(),
+  observability:   StackDecisionSchema,
+  hosting:         StackDecisionSchema,
+  cicd:            StackDecisionSchema,
+  additionalTools: z.array(StackDecisionSchema),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 4 — PRD ENTITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AcceptanceCriterionSchema = z.object({
+  acId:         z.string().regex(/^AC-/),
+  storyId:      z.string().regex(/^US-/),
+  given:        z.string().min(5),
+  when:         z.string().min(5),
+  then:         z.string().min(5),
+  additionalAssertions: z.array(z.string()),
+});
+
+export const UserStorySchema = z.object({
+  storyId:     z.string().regex(/^US-/),
+  featureId:   z.string().min(1),
+  personaId:   z.string().min(1),
+  asA:         z.string().min(2),
+  iWant:       z.string().min(5),
+  soThat:      z.string().min(5),
+  priority:    FeaturePrioritySchema,
+  acceptanceCriteria: z.array(AcceptanceCriterionSchema).min(1),
+  estimatedEffort: z.enum(["S", "M", "L", "XL"]),
+});
+
+export const FeatureSchema = z.object({
+  featureId:     z.string().min(1),
+  featureName:   z.string().min(3),
+  priority:      FeaturePrioritySchema,
+  category:      z.enum(["Core", "Auth", "Admin", "Integration", "Infrastructure"]),
+  description:   z.string().min(20),
+  personaIds:    z.array(z.string()).min(1),
+  dependencies:  z.array(z.string()),
+  userStories:   z.array(UserStorySchema).min(1),
+  technicalNotes: z.array(z.string()),
+  estimatedEffort: z.enum(["S", "M", "L", "XL"]),
+  phase:         z.number().int().min(1),
+});
+
+export const ADRSchema = z.object({
+  adrId:         z.string().regex(/^ADR-\d{3}$/),
+  title:         z.string().min(5),
+  date:          z.date(),
+  status:        ADRStatusSchema,
+  deciders:      z.array(z.string()).min(1),
+  prdVersion:    z.string(),
+  context:       z.string().min(20),
+  decision:      z.string().min(5),
+  options:       z.array(z.object({
+    label: z.string(),
+    pros:  z.array(z.string()),
+    cons:  z.array(z.string()),
+  })).min(2),
+  selectedOption:   z.string().min(1),
+  rationale:        z.string().min(20),
+  intakeFieldsConsidered: z.array(z.object({
+    fieldName: z.string(),
+    value:     z.unknown(),
+  })).min(1),
+  forcingConditions:    z.array(z.string()),
+  positiveConsequences: z.array(z.string()).min(1),
+  negativeConsequences: z.array(z.string()),
+  reversibility:        z.enum(["EASY", "MODERATE", "DIFFICULT", "IRREVERSIBLE"]),
+  reversalPlan:         z.string().nullable(),
+  followUpActions:      z.array(z.object({
+    action:  z.string(),
+    owner:   z.string(),
+    dueDate: z.date(),
+  })),
+});
+
+export const RiskSchema = z.object({
+  riskId:      z.string().regex(/^RISK-/),
+  category:    RiskCategorySchema,
+  source:      z.string().min(1),
+  description: z.string().min(10),
+  likelihood:  z.enum(["LOW", "MEDIUM", "HIGH"]),
+  impact:      z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]),
+  riskScore:   RiskScoreSchema,
+  mitigation:  z.string().min(10),
+  owner:       z.string().min(1),
+  reviewDate:  z.date(),
+  status:      z.enum(["OPEN", "MITIGATING", "RESOLVED", "ACCEPTED"]),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 5 — QUALITY GATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SectionScoreSchema = z.object({
+  sectionId:    z.string(),
+  sectionName:  z.string(),
+  maxPoints:    z.number().int().min(0),
+  earnedPoints: z.number().int().min(0),
+  remediationInstruction: z.string().nullable(),
+}).refine(
+  (s) => s.earnedPoints <= s.maxPoints,
+  { message: "earnedPoints cannot exceed maxPoints" }
+);
+
+export const QualityReportSchema = z.object({
+  prdRunId:             z.string().uuid(),
+  iterationNumber:      z.number().int().min(1),
+  completenessScore:    z.number().int().min(0).max(100),
+  consistencyDeduction: z.number().int().min(0).max(45),
+  finalScore:           z.number().int().min(0).max(100),
+  status:               QualityGateStatusSchema,
+  sectionScores:        z.array(SectionScoreSchema),
+  consistencyChecks:    z.array(z.object({
+    checkId:     z.string().regex(/^CC-\d{3}$/),
+    passed:      z.boolean(),
+    description: z.string(),
+    deduction:   z.union([z.literal(0), z.literal(3)]),
+    fix:         z.string().nullable(),
+  })),
+  failedSections: z.array(SectionScoreSchema),
+  failedChecks:   z.array(z.object({
+    checkId:     z.string(),
+    passed:      z.literal(false),
+    description: z.string(),
+    deduction:   z.literal(3),
+    fix:         z.string(),
+  })),
+  generatedAt: z.date(),
+}).refine(
+  (r) => r.finalScore === r.completenessScore - r.consistencyDeduction,
+  { message: "finalScore must equal completenessScore minus consistencyDeduction" }
+).refine(
+  (r) => {
+    if (r.finalScore >= 85) return r.status === "QUALITY_GATE_PASSED";
+    return true;
+  },
+  { message: "If finalScore ≥ 85, status must be QUALITY_GATE_PASSED" }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD METADATA
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SignOffSchema = z.object({
+  approverName: z.string().min(1),
+  approverRole: z.string().min(1),
+  approvedAt:   z.date(),
+  method:       z.enum(["digital_signature", "documented_email", "pr_approval"]),
+  comments:     z.string().nullable(),
+  conditions:   z.string().nullable(),
+});
+
+export const PRDMetadataSchema = z.object({
+  prdId:               z.string().regex(/^PRD-\d{4}-\d{3}$/),
+  intakeFormId:        z.string().uuid(),
+  prdRunId:            z.string().uuid(),
+  prdVersion:          z.string().regex(/^\d+\.\d+\.\d+$/),
+  prdStatus:           PRDStatusSchema,
+  generatedAt:         z.date(),
+  generatedBy:         z.string().min(1),
+  pipelineVersion:     z.string().regex(/^\d+\.\d+\.\d+$/),
+  stabilityScore:      z.number().int().min(0).max(100),
+  riskLevel:           RiskLevelSchema,
+  selectedArchetype:   ArchetypeSchema,
+  selectionMethod:     ArchetypeSelectionMethodSchema,
+  archetypeOverridden: z.boolean(),
+  qualityScore:        z.number().int().min(0).max(100).nullable(),
+  qualityPassed:       z.boolean().nullable(),
+  iterations:          z.number().int().min(0).max(5),
+  approvedBy:          z.array(SignOffSchema),
+  approvedAt:          z.date().nullable(),
+  frozenAt:            z.date().nullable(),
+  downstreamUnlocked:  z.boolean(),
+}).refine(
+  (m) => {
+    if (m.prdStatus === "FROZEN") return m.frozenAt !== null && m.downstreamUnlocked === true;
+    return true;
+  },
+  { message: "If status is FROZEN, frozenAt must be set and downstreamUnlocked must be true" }
+).refine(
+  (m) => {
+    if (m.prdStatus === "FROZEN" || m.prdStatus === "APPROVED") {
+      return m.qualityPassed === true;
+    }
+    return true;
+  },
+  { message: "FROZEN and APPROVED PRDs must have qualityPassed = true" }
+);
+```
+
