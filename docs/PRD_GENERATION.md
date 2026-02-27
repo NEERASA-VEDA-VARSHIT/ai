@@ -2820,3 +2820,588 @@ export const PRDMetadataSchema = z.object({
 );
 ```
 
+
+---
+
+## Example Generated PRDs
+
+The following three examples show the complete pipeline output for the three archetypes
+introduced in `REQUIREMENTS_INTAKE.md`. Each example shows only the metadata block, stability
+analysis, archetype decision, stack manifest, and quality gate result (the full PRD document
+structure is defined in Phase 4 above).
+
+---
+
+### Archetype A — Bootstrap SaaS MVP PRD
+
+**Intake Form Reference:** Archetype A — Bootstrap SaaS MVP (from REQUIREMENTS_INTAKE.md)
+
+#### Metadata Block
+
+```yaml
+prd_id:              "PRD-2026-001"
+intake_form_id:      "intake-arch-a-bootstrap-saas-001"
+prd_run_id:          "run-arch-a-001"
+prd_version:         "1.0.0"
+prd_status:          "APPROVED"
+generated_at:        "2026-02-01T09:00:00Z"
+generated_by:        "archai-pipeline-v1.0.0"
+pipeline_version:    "1.0.0"
+stability_score:     82
+risk_level:          "Low"
+selected_archetype:  "monolith"
+selection_method:    "DEFAULT"
+archetype_overridden: false
+quality_score:       91
+quality_passed:      true
+iterations:          1
+```
+
+#### Phase 1 — Stability Analysis
+
+```
+BASE SCORE: 100
+
+TENSIONS DETECTED:
+  TENSION-001
+    Severity:    WARN
+    Rule:        T-BS-004
+    Field A:     fundingStage = bootstrap
+    Field B:     monthlyInfrastructureBudget = under_500
+    Description: Very low infrastructure budget constrains managed service choices.
+    Score Impact: -10
+    Mitigation:  Use Neon free tier + Upstash Redis free tier + Vercel hobby tier for
+                 MVP. Budget will increase as revenue grows.
+
+  TENSION-002
+    Severity:    WARN
+    Rule:        T-TC-006
+    Field A:     testingLayers includes e2e
+    Field B:     mvpTimelineDays = 45
+    Description: E2E test infrastructure setup requires at least 1 week of dedicated
+                 engineering on a 45-day timeline.
+    Score Impact: -10
+    Mitigation:  Defer full Playwright suite to week 5. Ship with unit + integration
+                 tests only for MVP; add E2E in sprint 2.
+
+AMPLIFICATION RULES: None triggered.
+
+TOTAL DEDUCTED: -20
+FINAL STABILITY SCORE: 80/100
+RISK LEVEL: 🟢 Low Risk
+```
+
+#### Phase 2 — Archetype Decision
+
+```
+ARCHETYPE DECISION
+──────────────────────────────────────────────────────────────
+Selected Archetype:   monolith
+Selection Method:     DEFAULT (Rule 10 — no forcing condition matched)
+Archetype Overridden: false
+Stakeholder Preference: monolith (matches; no override needed)
+
+Reasoning:
+  Monolith selected as the coherent default for bootstrap SaaS MVP.
+  fundingStage = bootstrap, devTeamSize = solo, mvpTimelineDays = 45.
+  No tension forced the archetype; stakeholder preference aligns with
+  the optimal choice for these constraints.
+
+Evolution Path: monolith → modular_monolith → (optional) microservices
+  Stage 1 → Stage 2 trigger: MRR ≥ $5K or consistent 50+ RPS
+  Stage 2 → Stage 3 trigger: Enterprise customer or 500+ RPS
+──────────────────────────────────────────────────────────────
+```
+
+#### Phase 3 — Stack Manifest
+
+```yaml
+stack:
+  frontend:
+    selected:   "Next.js 15 App Router + Tailwind CSS + shadcn/ui"
+    rationale:  "App Router is the current standard; Tailwind + shadcn provides
+                 unstyled accessible components with minimal bundle cost."
+    forced:     false
+
+  backend:
+    selected:   "Next.js Route Handlers (REST)"
+    rationale:  "Collocated API routes eliminate a separate server process.
+                 Ideal for solo developer on bootstrap budget."
+    forced:     false
+
+  database:
+    selected:   "PostgreSQL via Neon (serverless)"
+    rationale:  "fundingStage = bootstrap. Neon has a generous free tier, no idle
+                 cost, and is production-grade PostgreSQL. No RDS operational burden."
+    forced:     false
+
+  orm:
+    selected:   "Prisma ORM"
+    rationale:  "Type-safe, migration-based, standard for this pipeline."
+    forced:     false
+
+  cache:
+    selected:   "Redis via Upstash (serverless)"
+    rationale:  "Required for session storage (Auth.js) and rate limiting.
+                 Upstash free tier is sufficient for MVP traffic."
+    forced:     true
+    forcingReason: "authLibrary = authjs_v5 with database sessions requires
+                    Redis for performance; rateLimitingStrategy = per_user."
+
+  auth:
+    selected:   "Auth.js v5 (email/password + Google OAuth)"
+    rationale:  "App Router compatible. Google OAuth reduces friction.
+                 Database sessions for revocability."
+    forced:     false
+
+  queue:
+    selected:   "Inngest"
+    rationale:  "jobQueuePreference = inngest. No infrastructure to manage.
+                 Handles email sending and cleanup jobs declared in intake."
+    forced:     false
+
+  storage:
+    selected:   "Cloudflare R2"
+    rationale:  "Zero egress fees vs AWS S3. S3-compatible API.
+                 fundingStage = bootstrap makes egress cost significant."
+    forced:     false
+
+  observability:
+    selected:   "Axiom (logging) + Sentry (error tracking)"
+    rationale:  "Both have generous free tiers. Axiom's Next.js SDK provides
+                 structured logging. Sentry provides session replay for debugging."
+    forced:     false
+
+  hosting:
+    selected:   "Vercel"
+    rationale:  "deploymentPlatform = vercel. Optimal DX for solo Next.js developer.
+                 Preview deployments included. Acceptable cold-start tolerance."
+    forced:     false
+
+  cicd:
+    selected:   "GitHub Actions + Vercel auto-deploy"
+    rationale:  "cicdPlatform = github_actions. Vercel auto-deploy from main branch
+                 with GitHub Actions for type-check, lint, and test gates."
+    forced:     false
+```
+
+#### Phase 5 — Quality Gate Result
+
+```
+QUALITY GATE RESULT (Iteration 1 — after targeted revision)
+  Completeness Score:   94/100
+  Consistency Deductions: -3 (CC-010: sprint plan initially exceeded 45 days)
+  Final Score:          91/100
+  Status:               ✅ QUALITY_GATE_PASSED
+
+  Iteration 0 (initial): 78/100 — FAILED SOFT
+    Failed Sections:
+      - Block 3.3 (User Stories): 2/5 pts — Missing stories for 3 P0 features
+      - Block 3.4 (Acceptance Criteria): 1/5 pts — Only 2 of 8 stories had ACs
+      - CC-010: Sprint plan was 55 days for 45-day timeline
+
+  Iteration 1 (targeted fix):
+    - Added user stories for all P0 features
+    - Added GIVEN/WHEN/THEN ACs for all stories
+    - Compressed sprint plan to 45 days
+    Score: 91/100 — PASSED
+```
+
+---
+
+### Archetype B — Series-A B2B Platform PRD
+
+**Intake Form Reference:** Archetype B — Series-A B2B Platform (from REQUIREMENTS_INTAKE.md)
+
+#### Metadata Block
+
+```yaml
+prd_id:              "PRD-2026-002"
+intake_form_id:      "intake-arch-b-series-a-b2b-001"
+prd_run_id:          "run-arch-b-001"
+prd_version:         "1.0.0"
+prd_status:          "APPROVED"
+generated_at:        "2026-02-15T09:00:00Z"
+generated_by:        "archai-pipeline-v1.0.0"
+pipeline_version:    "1.0.0"
+stability_score:     70
+risk_level:          "Medium"
+selected_archetype:  "modular_monolith"
+selection_method:    "DEFAULT"
+archetype_overridden: false
+quality_score:       88
+quality_passed:      true
+iterations:          2
+```
+
+#### Phase 1 — Stability Analysis
+
+```
+BASE SCORE: 100
+
+TENSIONS DETECTED:
+  TENSION-001
+    Severity:    WARN
+    Rule:        T-BS-002
+    Field A:     fundingStage = series_a
+    Field B:     projectScale = mid_market (approaching enterprise features)
+    Description: Mid-market ambitions with Series-A budget — the multi-tenant
+                 schema isolation adds significant operational complexity.
+    Score Impact: -10
+    Mitigation:  Use schema-level isolation (not database-per-tenant). Plan for
+                 dedicated DBA at Series-B. Document migration strategy in ADR.
+
+  TENSION-002
+    Severity:    WARN
+    Rule:        T-TC-004
+    Field A:     multiTenancyModel = schema_level
+    Field B:     mvpTimelineDays = 120
+    Description: Schema-level multi-tenancy with dynamic provisioning adds
+                 engineering complexity. 120 days is feasible but tight.
+    Score Impact: -10
+    Mitigation:  Build tenant provisioning service in Sprint 1. Use Prisma
+                 Migrate with custom resolver for per-tenant schemas.
+
+  TENSION-003
+    Severity:    WARN
+    Rule:        T-CB-003
+    Field A:     complianceFrameworks includes gdpr
+    Field B:     fundingStage = series_a
+    Description: GDPR compliance with Series-A budget is achievable but requires
+                 dedicated sprint capacity for data subject request workflows.
+    Score Impact: -10
+    Mitigation:  Implement DSR (data subject request) API in Sprint 3.
+                 Appoint a DPA-compliant data processor agreement with all vendors.
+
+  TENSION-004
+    Severity:    INFO
+    Rule:        T-AT-004
+    Field A:     openTelemetryRequired = true
+    Field B:     devTeamSize = medium (6-person team)
+    Description: Full OpenTelemetry setup requires non-trivial instrumentation.
+    Score Impact: -0
+    Note:        Budget 3 days for OTel setup in Sprint 1.
+
+AMPLIFICATION RULES: None triggered (only 0 CRITICAL tensions).
+
+TOTAL DEDUCTED: -30
+FINAL STABILITY SCORE: 70/100
+RISK LEVEL: 🟡 Medium Risk
+```
+
+#### Phase 2 — Archetype Decision
+
+```
+ARCHETYPE DECISION
+──────────────────────────────────────────────────────────────
+Selected Archetype:   modular_monolith
+Selection Method:     DEFAULT (Rule 10)
+Archetype Overridden: false
+Stakeholder Preference: modular_monolith (matches)
+
+Reasoning:
+  Modular monolith is coherent for Series-A B2B:
+  - fundingStage = series_a
+  - devTeamSize = medium (6 engineers)
+  - mvpTimelineDays = 120
+  - projectScale = mid_market
+  Stakeholder preference matches computed decision.
+  No forcing conditions.
+
+  This archetype enables:
+  - Domain module separation enforced at code level (ESLint boundaries)
+  - Shared PostgreSQL with schema-per-tenant isolation
+  - Clean extraction path to microservices when team reaches 15+
+
+Evolution Path: modular_monolith → modular_monolith (enhanced) → microservices
+  Stage 1 → Stage 2 trigger: MRR ≥ $50K, 50+ active tenants
+  Stage 2 → Stage 3 trigger: Enterprise contract, team ≥ 15 engineers
+──────────────────────────────────────────────────────────────
+```
+
+#### Phase 3 — Stack Manifest (Abbreviated)
+
+```yaml
+stack:
+  frontend:  "Next.js 15 App Router + Tailwind CSS + shadcn/ui + next-intl (i18nRequired = true)"
+  backend:   "Next.js Route Handlers (REST) + zod-to-openapi (openapi_auto)"
+  database:  "PostgreSQL via AWS RDS (fundingStage = series_a, deploymentPlatform = aws)"
+  orm:       "Prisma ORM + custom schema resolver for multi-tenant schemas"
+  cache:     "Redis via AWS ElastiCache (fundingStage = series_a, deploymentPlatform = aws)"
+  auth:      "Auth.js v5 + Microsoft Entra (SAML) + email/password"
+  queue:     "Inngest (jobQueuePreference = inngest, event_driven + scheduled_cron + email)"
+  storage:   "AWS S3 + presigned uploads (uploadStrategy = client_direct)"
+  observability: "Datadog APM + logs + OpenTelemetry OTLP exporter"
+  hosting:   "AWS ECS Fargate (containerizationRequired = true, deploymentPlatform = aws)"
+  cicd:      "GitHub Actions — blue/green deploy via ECS task set swap"
+```
+
+#### ADR Summary
+
+```
+ADR-001: Modular Monolith (not microservices) — DEFAULT selection, matches preference
+ADR-002: AWS RDS PostgreSQL Multi-AZ — series_a + aws + 99.9% SLA requirement
+ADR-003: Auth.js v5 + Microsoft Entra SAML — B2B customers require SSO
+ADR-004: ElastiCache Redis — series_a + aws deployment, unified infrastructure
+ADR-005: AWS ECS Fargate — containerizationRequired = true, zero cold-start tolerance
+ADR-006: Schema-per-tenant isolation — multi-tenant requirement, balanced isolation vs cost
+ADR-007: Inngest over BullMQ — no Redis queue management overhead; event-driven native
+```
+
+#### Phase 5 — Quality Gate Result
+
+```
+QUALITY GATE RESULT (Iteration 2 — after two targeted revisions)
+  Final Score:  88/100
+  Status:       ✅ QUALITY_GATE_PASSED
+
+  Iteration 0: 71/100 — FAILED SOFT
+    Failed: Block 2.3 (Competitive Landscape, only 2 competitors listed)
+            Block 4.4 (GDPR obligations section incomplete)
+            CC-006: Compliance section didn't match all intake Section 13 fields
+
+  Iteration 1: 82/100 — FAILED SOFT
+    Fixed:  Competitive landscape (3 competitors added)
+    Still failing: CC-012 (SOC 2 Type II section missing from compliance block)
+
+  Iteration 2: 88/100 — PASSED
+    Fixed:  Added SOC 2 Type II compliance requirements section
+```
+
+---
+
+### Archetype C — Enterprise Compliance Platform PRD
+
+**Intake Form Reference:** Archetype C — Enterprise Compliance Platform (from REQUIREMENTS_INTAKE.md)
+
+#### Metadata Block
+
+```yaml
+prd_id:              "PRD-2026-003"
+intake_form_id:      "intake-arch-c-enterprise-compliance-001"
+prd_run_id:          "run-arch-c-001"
+prd_version:         "1.0.0"
+prd_status:          "APPROVED"
+generated_at:        "2026-02-20T09:00:00Z"
+generated_by:        "archai-pipeline-v1.0.0"
+pipeline_version:    "1.0.0"
+stability_score:     55
+risk_level:          "High"
+selected_archetype:  "modular_monolith"
+selection_method:    "DEFAULT"
+archetype_overridden: false
+quality_score:       87
+quality_passed:      true
+iterations:          3
+```
+
+#### Phase 1 — Stability Analysis
+
+```
+BASE SCORE: 100
+
+TENSIONS DETECTED:
+  TENSION-001
+    Severity:    CRIT
+    Rule:        T-AC-001
+    Field A:     aiProvider = [azure_openai]
+    Field B:     complianceFrameworks includes hipaa
+    Description: Sending PHI to Azure OpenAI requires a signed BAA with Microsoft.
+                 Azure OpenAI DOES offer a HIPAA BAA addendum — but it must be
+                 explicitly signed before deployment.
+    Score Impact: -25 (CRITICAL, even though mitigatable)
+    Mitigation:  Sign Azure OpenAI HIPAA BAA before processing any PHI through AI.
+                 Implement PHI scrubbing layer before AI requests.
+                 Add technical control: PHI detection regex + Named Entity Recognition
+                 before any data leaves the system boundary.
+
+  TENSION-002
+    Severity:    WARN
+    Rule:        T-BS-003
+    Field A:     fundingStage = series_b
+    Field B:     complianceFrameworks = [hipaa, soc2_type2, wcag_aa]
+    Description: Three compliance frameworks with Series-B budget creates significant
+                 engineering overhead. HIPAA + SOC 2 Type II require dedicated
+                 compliance engineering, not just technical controls.
+    Score Impact: -10
+    Mitigation:  Hire a dedicated Compliance Engineer (or contract a vCISO) before
+                 beginning compliance certification work. Budget $100K–$200K/year
+                 for audit and compliance tooling.
+
+  TENSION-003
+    Severity:    WARN
+    Rule:        T-PI-002
+    Field A:     peakRPS = 100_to_1k
+    Field B:     archetype = modular_monolith
+    Description: 1K RPS on a monolith/modular monolith requires horizontal
+                 scaling configuration.
+    Score Impact: -10
+    Mitigation:  Configure ECS Fargate auto-scaling with minimum 2 instances
+                 behind ALB. Ensure session strategy supports horizontal scaling
+                 (database sessions, not JWT-only).
+
+  TENSION-004
+    Severity:    INFO
+    Rule:        T-RT-002
+    Field A:     realTimeDeliveryGuarantee = at_least_once
+    Field B:     realTimeProtocol = server_sent_events
+    Description: SSE does not natively support at_least_once delivery.
+    Score Impact: 0
+    Note:        Implement client-side SSE reconnection + server-side event cursor
+                 to replay missed events on reconnect.
+
+AMPLIFICATION RULES:
+  AMPLIFICATION_RULE_A: 3 compliance frameworks + critical AI tension
+    Triggered: false (only 1 CRITICAL tension)
+  AMPLIFICATION_RULE_C: 3 compliance frameworks with fundingStage ≤ seed
+    Triggered: false (fundingStage = series_b, not ≤ seed)
+
+TOTAL DEDUCTED: -25 (CRIT) - 10 (WARN) - 10 (WARN) = -45
+AMPLIFICATION: none triggered (only 1 CRITICAL tension)
+FINAL STABILITY SCORE: 55/100
+RISK LEVEL: 🟠 High Risk
+
+Note: The CRITICAL tension (T-AC-001) is architectural but resolvable via a
+      contractual and technical control. The pipeline continues but marks the
+      PRD as PROVISIONAL for the AI section until BAA confirmation is received.
+```
+
+#### Phase 2 — Archetype Decision
+
+```
+ARCHETYPE DECISION
+──────────────────────────────────────────────────────────────
+Selected Archetype:   modular_monolith
+Selection Method:     DEFAULT (Rule 10)
+Archetype Overridden: false
+Stakeholder Preference: modular_monolith (matches)
+
+Reasoning:
+  Modular monolith is correct for enterprise compliance:
+  - fundingStage = series_b
+  - devTeamSize = large (10+ engineers)
+  - mvpTimelineDays = 180
+  - complianceFrameworks = [hipaa, soc2_type2, wcag_aa]
+
+  Compliance requirements demand careful boundary control and
+  audit logging — a modular monolith provides this more simply
+  than microservices (distributed audit trails are significantly
+  harder to make HIPAA-compliant).
+
+  Microservices would require:
+  - Distributed audit trail aggregation (complex)
+  - Service-to-service auth for PHI (mTLS + service accounts)
+  - Per-service HIPAA controls review (multiplied audit surface)
+
+  Modular monolith provides:
+  - Centralized audit logging (single database, single write path)
+  - Clear module boundaries for compliance domain isolation
+  - Simpler penetration testing surface area
+
+Evolution Path: modular_monolith → modular_monolith (enhanced) → selective services
+  Stage 1 → Stage 2 trigger: 50+ enterprise tenants, consistent 500+ RPS
+  Stage 2 → Stage 3 trigger: Federal/government contract, requires FedRAMP
+──────────────────────────────────────────────────────────────
+```
+
+#### Phase 3 — Stack Manifest (Abbreviated)
+
+```yaml
+stack:
+  frontend:  "Next.js 15 App Router + Tailwind CSS + shadcn/ui (WCAG AA compliance required)"
+  backend:   "Next.js Route Handlers (REST + url versioning) + zod-to-openapi"
+  database:  "PostgreSQL via AWS RDS Multi-AZ (series_b + hipaa + 99.9% SLA)"
+  orm:       "Prisma ORM + custom schema resolver + expand-contract migration strategy"
+  cache:     "Redis via AWS ElastiCache Cluster (peakRPS = 100_to_1k, tenant-based rate limit)"
+  auth:      "Auth.js v5 + Microsoft Entra (SAML/OIDC) + TOTP MFA (HIPAA required)"
+  queue:     "Inngest (all job types: scheduled, event-driven, billing, compliance reports)"
+  storage:   "AWS S3 + SSE-KMS + Block public access + CloudTrail (HIPAA mandatory)"
+  observability: "Datadog APM + logs + PagerDuty alerting + OpenTelemetry"
+             "HIPAA audit log: Dedicated Postgres table + 7-year retention"
+  hosting:   "AWS ECS Fargate (containerizationRequired = true, zero cold start)"
+             "Separate AWS accounts for prod and staging (HIPAA isolation)"
+  cicd:      "GitHub Actions — blue/green deploy via ECS task set"
+             "ciChecks include: security_scan + db_migration_check"
+```
+
+#### Critical ADR Summary
+
+```
+ADR-001: Modular Monolith — correct for HIPAA compliance surface area
+ADR-002: AWS RDS Multi-AZ — hipaa + 99.9% SLA mandates Multi-AZ failover
+ADR-003: Auth.js v5 + database sessions + TOTP MFA — HIPAA auth requirements
+ADR-004: ElastiCache Redis Cluster Mode — 1K RPS + tenant rate limiting
+ADR-005: AWS ECS Fargate multi-AZ — zero cold start + HIPAA isolated environment
+ADR-006: Schema-per-tenant isolation — hipaa tenant data isolation requirement
+ADR-007: Azure OpenAI with BAA — PROVISIONAL until BAA confirmed signed
+ADR-008: Dedicated audit log table — HIPAA requires immutable, queryable audit trail
+ADR-009: Separate AWS accounts per environment — HIPAA + SOC 2 isolation control
+```
+
+#### Phase 5 — Quality Gate Result
+
+```
+QUALITY GATE RESULT (Iteration 3)
+  Final Score:  87/100
+  Status:       ✅ QUALITY_GATE_PASSED
+
+  Iteration 0: 66/100 — FAILED HARD
+    Multiple blocks incomplete: compliance NFRs, security requirements,
+    ADR-007 (AI PHI handling) missing, sprint plan not HIPAA-phased
+
+  Iteration 1: 78/100 — FAILED SOFT
+    Fixed: Compliance NFRs, security requirements
+    Still failing: ADR-007 not complete (BAA path not documented),
+                   Sprint plan not accounting for compliance sprint
+
+  Iteration 2: 83/100 — FAILED SOFT
+    Fixed: ADR-007 with full BAA path and PHI scrubbing controls
+    Still failing: CC-012 (WCAG AA section missing from Block 4.6)
+
+  Iteration 3: 87/100 — PASSED
+    Fixed: Added WCAG AA NFR section with axe-core CI requirement
+```
+
+---
+
+## PRD Generation Version History
+
+```
+Version 1.0.0 — Initial release
+  Added: Full 7-phase PRD generation pipeline specification
+  Added: Phase 1 — Stability Analysis with 25 tension rules across 7 categories
+  Added: Phase 1 — Composite amplification rules (4 amplification scenarios)
+  Added: Phase 2 — Archetype Decision Matrix (10-rule priority matrix)
+  Added: Phase 2 — Forced archetype override system with ADR generation
+  Added: Phase 2 — 3-stage Evolution Roadmap framework
+  Added: Phase 3 — Stack Prescription Engine (9 decision trees, 100+ decision nodes)
+  Added: Phase 4 — 10-block mandatory PRD template structure
+  Added: Phase 4 — 12 section generation templates (executive summary through roadmap)
+  Added: Phase 4 — ADR format specification (standard ADR-001 through ADR-005)
+  Added: Phase 4 — Risk register format with standard risks per archetype
+  Added: Phase 5 — 100-point Quality Gate scoring model (10 blocks)
+  Added: Phase 5 — 15 internal consistency checks with 3-point deductions
+  Added: Phase 6 — Iteration loop with dependency map, convergence criteria, 5-run budget
+  Added: Phase 7 — PRD approval state machine (6 states, 7 valid transitions)
+  Added: Phase 7 — Stakeholder sign-off matrix by funding stage + compliance
+  Added: Phase 7 — Immutability contract (7 rules)
+  Added: Phase 7 — Downstream unlock sequence (6 stages)
+  Added: TypeScript interfaces (12 enums, 20 interfaces, full type coverage)
+  Added: Zod validation schemas (all entities, cross-field refinements)
+  Added: Three complete example PRD runs (Bootstrap, Series-A, Enterprise)
+  Framework: Next.js (primary)
+  Status: ACTIVE
+
+Planned: Version 1.1.0
+  - Add mobile app (React Native) stack prescription trees
+  - Add Phase 3 decision trees for GraphQL and tRPC architectures
+  - Add Phase 5 automated consistency check execution engine specification
+  - Add multi-region active-active tension detection rules
+  - Add FedRAMP compliance tension and stack decision rules
+  - Add white-label / OEM tenant theming decision tree
+```
+
+---
+
+*End of PRD_GENERATION.md — Document 2 of 4*
+*Next: See `CLARIFICATION_PROCESS.md` for Phase 1 — Ambiguity classification and clarification workflow.*
