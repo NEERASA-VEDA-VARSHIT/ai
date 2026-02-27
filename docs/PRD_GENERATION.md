@@ -1598,3 +1598,255 @@ ARCHITECTURE EVOLUTION TRIGGERS (gates between stages)
 ══════════════════════════════════════════════════════════════════════
 ```
 
+
+---
+
+## Phase 5 — PRD Quality Gate
+
+Phase 5 scores the generated PRD against a 100-point completeness and consistency model.
+A PRD must score ≥ 85 to proceed to Phase 7 (Approval). Any score below 85 triggers Phase 6
+(Iteration Loop).
+
+### 5A — Completeness Scoring Model
+
+The quality score is computed by evaluating each mandatory PRD block against a point allocation.
+Every block has a maximum score. Partial credit is awarded for partial completion.
+
+```
+QUALITY GATE SCORING MODEL
+═══════════════════════════════════════════════════════════════════════════════
+Block                             Max Points  Scoring Rule
+───────────────────────────────────────────────────────────────────────────────
+BLOCK 0 — Metadata & Provenance       5       All 4 sections present = 5; else 1pt each
+BLOCK 1 — Product Definition         20       4 pts per section (5 sections)
+BLOCK 2 — Users & Market             15       5 pts per section (3 sections + differentiation)
+BLOCK 3 — Feature Requirements       20       5 pts per section (4 sections)
+BLOCK 4 — Non-Functional Req.        10       2 pts per section (5 sections)
+BLOCK 5 — Technical Architecture     15       3 pts per section (5 sections)
+BLOCK 6 — Architecture Decision Recs  5       1 pt per ADR (min 3 required for full credit)
+BLOCK 7 — Risk Register               5       2 pts presence + 1 pt per category covered (min 3)
+BLOCK 8 — Evolution Roadmap           3       All 3 stages present = 3; 1 pt each
+BLOCK 9 — Delivery Plan               2       Team structure + sprint structure = 2
+BLOCK 10 — Approval Matrix            0       Not scored; required for Phase 7
+───────────────────────────────────────────────────────────────────────────────
+TOTAL                               100
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+**Scoring Sub-rules for Block 1 (Product Definition):**
+
+| Section | Full Credit (4 pts) | Partial Credit (2 pts) | No Credit (0 pts) |
+|---|---|---|---|
+| 1.1 Executive Summary | 3 paragraphs, all placeholders filled | Present but < 3 paragraphs | Missing |
+| 1.2 Problem Statement | All 4 sub-sections present | 2–3 sub-sections | Missing or only 1 section |
+| 1.3 Opportunity Hypothesis | Hypothesis + market size + differentiator | Hypothesis only | Missing |
+| 1.4 Goals & Non-Goals | Both goals AND non-goals present | Goals only | Missing |
+| 1.5 Success Metrics | ≥ 3 SMART metrics with measurement methods | < 3 metrics | Missing |
+
+**Scoring Sub-rules for Block 3 (Feature Requirements):**
+
+| Section | Full Credit (5 pts) | Partial Credit | No Credit |
+|---|---|---|---|
+| 3.1 Feature Inventory | All features listed, all priorities set | > 50% of features listed | Missing |
+| 3.2 MVP Feature Set | All P0 features scoped with rationale | P0 features listed, no rationale | Missing |
+| 3.3 User Stories | ≥ 1 story per P0 feature | Stories for > 50% of P0 features | Missing |
+| 3.4 Acceptance Criteria | ≥ 1 AC per user story in GIVEN/WHEN/THEN | AC present for > 50% of stories | Missing |
+| 3.5 Out of Scope | Explicit list of excluded features | Implied but not explicit | Missing |
+
+---
+
+### 5B — Internal Consistency Checks
+
+In addition to completeness scoring, the Quality Gate runs 15 consistency checks.
+Each FAIL deducts 3 points from the total score (applied after completeness scoring).
+
+```
+CONSISTENCY CHECK CATALOGUE
+───────────────────────────────────────────────────────────────────────────────
+CC-001  Every user story in Block 3 references a persona defined in Block 2
+        FAIL deduction: -3 pts | Fix: Add missing persona OR rewrite story
+
+CC-002  Every acceptance criterion references a user story in Block 3.3
+        FAIL deduction: -3 pts | Fix: Link or remove orphaned ACs
+
+CC-003  Every ADR in Block 6 references an intake field that drove the decision
+        FAIL deduction: -3 pts | Fix: Add intake field references to each ADR
+
+CC-004  Stack manifest in Block 5.2 matches computed stack from Phase 3
+        FAIL deduction: -3 pts | Fix: Re-run Phase 3, update Block 5.2
+
+CC-005  Performance targets in Block 4.1 match intake Section 11
+        FAIL deduction: -3 pts | Fix: Sync Block 4.1 with intake values
+
+CC-006  Compliance requirements in Block 4.4 match intake Section 13
+        FAIL deduction: -3 pts | Fix: Sync Block 4.4 with intake values
+
+CC-007  Evolution roadmap stages in Block 8 are coherent with selected archetype
+        (e.g., monolith roadmap must not mention service mesh in Stage 1)
+        FAIL deduction: -3 pts | Fix: Regenerate roadmap for archetype
+
+CC-008  Risk register in Block 7 includes at least one risk per detected tension
+        FAIL deduction: -3 pts | Fix: Add risks derived from tension report
+
+CC-009  Non-goal list in Block 1.4 does not contradict features in Block 3.1
+        (no feature can be both in-scope and explicitly out-of-scope)
+        FAIL deduction: -3 pts | Fix: Resolve scope contradiction
+
+CC-010  Sprint plan in Block 9.2 timeline fits within mvpTimelineDays from intake
+        FAIL deduction: -3 pts | Fix: Compress or expand sprint plan
+
+CC-011  If archetypeOverridden = true, ADR-001 must be present in Block 6
+        FAIL deduction: -3 pts | Fix: Add ADR-001 override record
+
+CC-012  If complianceFrameworks is non-empty, Block 4.4 must have one entry per framework
+        FAIL deduction: -3 pts | Fix: Add compliance section per framework
+
+CC-013  If requiresRealTime = true, Block 4.5 scalability section must address
+        concurrent connection limits
+        FAIL deduction: -3 pts | Fix: Add NFR-SC entry for real-time scale
+
+CC-014  If requiresBackgroundJobs = true, Block 5.2 tech stack must include queue
+        infrastructure with the chosen provider
+        FAIL deduction: -3 pts | Fix: Add queue entry to tech stack manifest
+
+CC-015  If readReplicaRequired = true, Block 5.6 infrastructure overview must
+        include read replica topology
+        FAIL deduction: -3 pts | Fix: Update infrastructure diagram
+
+───────────────────────────────────────────────────────────────────────────────
+MAXIMUM DEDUCTION FROM CONSISTENCY CHECKS: -45 pts (all 15 fail)
+EFFECTIVE MAXIMUM QUALITY SCORE: 100 pts (no deductions)
+PASS THRESHOLD: 85 pts
+───────────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### 5C — Quality Gate Pass / Fail Rules
+
+```
+QUALITY GATE DECISION
+──────────────────────────────────────────────────────────────────────────────
+IF finalScore ≥ 85:
+  status = QUALITY_GATE_PASSED
+  → Proceed to Phase 7 (Approval)
+  → Log: "✅ PRD Quality Gate PASSED — Score: {score}/100. Routing to approval workflow."
+
+IF finalScore ≥ 70 AND finalScore < 85:
+  status = QUALITY_GATE_FAILED_SOFT
+  → Trigger Phase 6 (Iteration — targeted fixes only)
+  → Log: "⚠️  PRD Quality Gate FAILED — Score: {score}/100. {failedSections} require revision."
+  → List all sections that lost points with specific remediation instructions
+
+IF finalScore < 70:
+  status = QUALITY_GATE_FAILED_HARD
+  → Trigger Phase 6 (Iteration — full regeneration of failing blocks)
+  → Log: "❌ PRD Quality Gate FAILED HARD — Score: {score}/100. Major sections are incomplete."
+  → List all failing blocks with regeneration instructions
+
+IF 3 or more consistency checks FAILED:
+  status = QUALITY_GATE_CONSISTENCY_FAILURE
+  → Trigger Phase 6 regardless of completeness score
+  → Log: "❌ PRD Consistency Check FAILED — {n} internal contradictions detected."
+  → List all failed consistency checks with specific fix instructions
+
+──────────────────────────────────────────────────────────────────────────────
+Quality Report is attached to the PRD metadata block:
+  quality_score:    {finalScore}
+  quality_passed:   {true | false}
+  failed_sections:  [{sectionId, pointsLost, remediationInstruction}]
+  failed_checks:    [{checkId, description, fix}]
+──────────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+## Phase 6 — PRD Iteration & Clarification Loop
+
+Phase 6 is triggered when the Quality Gate fails. It identifies what changed, what must be
+regenerated, and feeds the corrections back through Phase 4 for the affected sections only.
+
+### 6A — When Iteration Is Triggered
+
+| Trigger | Iteration Type | Scope |
+|---|---|---|
+| Completeness score < 85, ≥ 70 | Targeted Revision | Only sections that lost points |
+| Completeness score < 70 | Full Block Regeneration | All blocks scoring < 50% |
+| Consistency check failure | Targeted Fix | Specific sections identified by failed check |
+| Intake clarification received | Cascading Update | All sections dependent on changed field |
+| Stakeholder revision request | Manual Override | Specified sections + dependent sections |
+
+---
+
+### 6B — Partial Regeneration Rules
+
+When only specific sections need regeneration, the pipeline uses dependency tracking to
+determine which other sections may be affected:
+
+```
+SECTION DEPENDENCY MAP
+──────────────────────────────────────────────────────────────────────────────
+Section Changed          Dependent Sections That May Need Update
+──────────────────────────────────────────────────────────────────────────────
+1.2 Problem Statement  → 1.1 Executive Summary, 1.3 Opportunity Hypothesis
+1.4 Goals & Non-Goals  → 3.5 Out of Scope, 9.2 Sprint Structure
+2.1 User Personas      → 3.3 User Stories, 2.2 Journey Maps
+3.1 Feature Inventory  → 3.2 MVP Feature Set, 9.2 Sprint Structure, 7.x Risk Register
+3.2 MVP Feature Set    → 3.3 User Stories, 3.4 Acceptance Criteria, 9.2 Sprint Structure
+4.1 Performance Req.   → 5.2 Tech Stack (if stack change needed), 7.x Risk Register
+4.4 Compliance Req.    → 5.2 Tech Stack, 6.x ADRs, 7.x Compliance Risks
+5.2 Tech Stack         → 5.3 System Diagrams, 5.6 Infrastructure, 6.x ADRs
+6.x ADRs               → 7.x Technical Risks (risk register may need new entries)
+7.x Risk Register      → No downstream dependents (leaf node)
+8.x Evolution Roadmap  → 9.2 Sprint Structure (Stage 1 milestones)
+──────────────────────────────────────────────────────────────────────────────
+```
+
+**Cascade Policy:** When a section is regenerated, ALL dependent sections are flagged
+for review. If the regenerated section's content is materially different from the
+previous version, dependent sections are automatically queued for regeneration.
+
+---
+
+### 6C — Iteration Convergence Criteria
+
+An iteration is considered **converged** when:
+
+1. Quality Gate score ≥ 85
+2. Zero consistency check failures
+3. No sections are still flagged with remediation instructions
+4. All intake clarifications have been incorporated (if triggered by clarification)
+
+If an iteration does not converge, the quality score delta is computed:
+
+```
+IF (newScore - previousScore) < 5 for 2 consecutive iterations:
+  status = ITERATION_STALLED
+  → Escalate to human review
+  → Log: "PRD generation has stalled. Score improved by only {delta} pts in 2 iterations.
+          Manual review required for: {stalledSections}"
+```
+
+---
+
+### 6D — Maximum Iteration Budget
+
+```
+ITERATION BUDGET
+──────────────────────────────────────────────────────────────────────────────
+Maximum automated iterations:  5
+After 5 failed iterations:     PRD status = MANUAL_REVIEW_REQUIRED
+                                Pipeline halts automated generation
+                                Human operator must intervene
+
+Iteration Log Format:
+  Iteration 1: Score {n1}/100 — Sections revised: {sections}
+  Iteration 2: Score {n2}/100 — Sections revised: {sections}
+  ...
+  Iteration N: Score {nN}/100 — Status: {PASSED | MANUAL_REVIEW_REQUIRED}
+
+Each iteration is stored with its quality report, failed sections, and
+the specific changes made, creating a full audit trail.
+──────────────────────────────────────────────────────────────────────────────
+```
+
